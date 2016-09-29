@@ -327,6 +327,12 @@ cxx_indexer_test(
 )
 
 cxx_indexer_test(
+    name = "initlist_struct",
+    srcs = ["basic/initlist_struct.cc"],
+    tags = ["basic"],
+)
+
+cxx_indexer_test(
     name = "inline_namespace",
     srcs = ["basic/inline_namespace.cc"],
     tags = ["basic"],
