@@ -1072,6 +1072,18 @@ bool IndexerASTVisitor::VisitCXXConstructExpr(
   return true;
 }
 
+bool IndexerASTVisitor::VisitCXXInitListExpr(
+    const clang::InitListExpr *ILE) {
+  if (!ILE->isSemanticForm()) {
+    ILE = ILE->getSemanticForm();
+  }
+  GraphObserver::NodeId ILENode = BuildNodeIdForExpr(ILE, EmitRanges::Yes);
+  if (auto TyNodeId = BuildNodeIdForType(ILE->getType())) {
+    Observer.recordTypeEdge(ILENode, TyNodeId.primary());
+  }
+  return true;
+}
+
 bool IndexerASTVisitor::VisitCXXDeleteExpr(const clang::CXXDeleteExpr *E) {
   if (BlameStack.empty()) {
     return true;
