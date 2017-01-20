@@ -1097,6 +1097,14 @@ cxx_indexer_test(
     deps = ["libraries/flags_string.h"] + glob(["libraries/gflags*.h"]),
 )
 
+cxx_indexer_test(
+    name = "proto_parsetextproto",
+    srcs = ["libraries/proto_parsetextproto.cc"],
+    ignore_dups = True,
+    tags = ["libraries"],
+    deps = ["libraries/proto_parsetextproto.h"],
+)
+
 test_suite(
     name = "indexer_libraries",
     tags = ["libraries"],

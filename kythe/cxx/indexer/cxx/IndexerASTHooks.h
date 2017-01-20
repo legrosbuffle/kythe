@@ -481,6 +481,9 @@ public:
   /// \brief Returns the attached GraphObserver.
   GraphObserver &getGraphObserver() { return Observer; }
 
+  /// \brief Returns the ASTContext.
+  const clang::ASTContext &getASTContext() { return Context; }
+
   /// Returns `SR` as a `Range` in this `RecursiveASTVisitor`'s current
   /// RangeContext.
   MaybeFew<GraphObserver::Range>
