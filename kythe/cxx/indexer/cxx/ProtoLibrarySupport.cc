@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Google Inc. All rights reserved.
+ * Copyright 2017 Google Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,16 +18,20 @@
 
 // Implementation notes:
 // The proto indexer outputs searchable names for cpp calls to proto
-// getters/setters.
-// The idea is that we're going to emit references from sections of the string
-// literal being parsed to getters of generated cpp messages.
+// getters/setters, and links them to the original fields in the protobuf
+// message definition.
+// The idea is that we're not going to refer to the original proto fields
+// directly. Instead, we're going to emit references from sections of the string
+// literal being parsed to the corresponding getters of generated cpp classes.
+// Because the proto indexer links these getters to the original fields, we get
+// the behaviour we want.
 // 1. We start by getting the cpp message decl from the type T of the message
 //    being parsed, using "ParseProtoHelper::operator T()".
 // 2. To index a field named "blah", we just need to emit references to T::blah.
 // 3. If we are accessing a subfield "inner_blah", we need to get the type U for
 //    this field. We can do that without Kythe knowing about the proto because
 //    we can get the type from the return value of the accessor T::inner_blah
-//   (that returns a const U&). Then we can apply (2) again.
+//    (that returns a const U&). Then we can apply (2) again.
 
 #include "ProtoLibrarySupport.h"
 
@@ -65,6 +69,14 @@ class LogErrors : public google::protobuf::io::ErrorCollector {
 // nothing about the proto being parsed.
 class ParseTextProtoHandler {
  public:
+  // Parses the message and returns true on success.
+  static bool Parse(const ParseCallback& FoundField,
+                    const clang::StringLiteral* Literal,
+                    const clang::CXXRecordDecl& MsgDecl,
+                    const clang::ASTContext& Context,
+                    const clang::LangOptions& LangOpts);
+
+ private:
   // Creates a ParseTextProtoHandler that parses the given value and calls
   // found_field on findings. All objects should remain valid for the
   // lifetime of the handler.
@@ -73,10 +85,6 @@ class ParseTextProtoHandler {
                         const clang::ASTContext& Context,
                         const clang::LangOptions& LangOpts);
 
-  // Parses the message and returns true on success. Can only be called once.
-  bool Parse(const clang::CXXRecordDecl& MsgDecl);
-
- private:
   // Parses fields of a message with the given decl. Returns false on error. If
   // nested is true, then hitting a '}' token will return without error.
   bool ParseMsg(const clang::CXXRecordDecl& MsgDecl, bool Nested);
@@ -98,7 +106,7 @@ class ParseTextProtoHandler {
   const ParseCallback FoundField;
   google::protobuf::io::ArrayInputStream IStream;
   LogErrors Errors;
-  std::unique_ptr<Tokenizer> TextTokenizer;
+  Tokenizer TextTokenizer;
   std::vector<int> LineToOffset;
 };
 
@@ -121,7 +129,7 @@ ParseTextProtoHandler::ParseTextProtoHandler(
       LangOpts(LangOpts),
       FoundField(FoundField),
       IStream(Literal->getBytes().data(), Literal->getBytes().size()),
-      TextTokenizer(new Tokenizer(&IStream, &Errors)) {
+      TextTokenizer(&IStream, &Errors) {
   // TODO(courbet): It would be much better to add support for byte offset in
   // the tokenizer directly.
   LineToOffset.push_back(0);
@@ -132,20 +140,18 @@ ParseTextProtoHandler::ParseTextProtoHandler(
   }
 }
 
-bool ParseTextProtoHandler::Parse(const clang::CXXRecordDecl& MsgDecl) {
-  // Make sure we don't call it twice.
-  if (!TextTokenizer) {
-    return false;
-  }
-  const bool Result = ParseMsg(MsgDecl, false);
-  TextTokenizer.reset(nullptr);
-  return Result;
+bool ParseTextProtoHandler::Parse(
+    const ParseCallback& FoundField, const clang::StringLiteral* Literal,
+    const clang::CXXRecordDecl& MsgDecl,
+    const clang::ASTContext& Context, const clang::LangOptions& LangOpts) {
+  ParseTextProtoHandler handler(FoundField, Literal, Context, LangOpts);
+  return handler.ParseMsg(MsgDecl, false);
 }
 
 bool ParseTextProtoHandler::ParseMsg(const clang::CXXRecordDecl& MsgDecl,
                                      bool nested) {
-  while (TextTokenizer->Next()) {
-    const Tokenizer::Token& Token = TextTokenizer->current();
+  while (TextTokenizer.Next()) {
+    const Tokenizer::Token& Token = TextTokenizer.current();
     switch (Token.type) {
       case Tokenizer::TYPE_IDENTIFIER: {
         // Assume that this is a field name.
@@ -187,11 +193,11 @@ bool ParseTextProtoHandler::ParseMsg(const clang::CXXRecordDecl& MsgDecl,
 
 bool ParseTextProtoHandler::ParseFieldValue(
     const clang::CXXMethodDecl& accessor_decl) {
-  if (!TextTokenizer->Next()) {
+  if (!TextTokenizer.Next()) {
     LOG(ERROR) << "Expected field value, got EOF";
     return false;
   }
-  const Tokenizer::Token& Token = TextTokenizer->current();
+  const Tokenizer::Token& Token = TextTokenizer.current();
   switch (Token.type) {
     case Tokenizer::TYPE_IDENTIFIER:
       LOG(ERROR) << "Unexpected identifier " << Token.text;
@@ -214,8 +220,8 @@ bool ParseTextProtoHandler::ParseFieldValue(
         return ParseMsg(*SubMsgDecl, true);
       } else if (Token.text == ":") {
         // Parse one literal.
-        TextTokenizer->Next();
-        const Tokenizer::Token& LiteralToken = TextTokenizer->current();
+        TextTokenizer.Next();
+        const Tokenizer::Token& LiteralToken = TextTokenizer.current();
         if (!(LiteralToken.type == Tokenizer::TYPE_INTEGER ||
               LiteralToken.type == Tokenizer::TYPE_FLOAT ||
               LiteralToken.type == Tokenizer::TYPE_STRING ||
@@ -248,54 +254,37 @@ clang::SourceRange ParseTextProtoHandler::GetTokenSourceRange(
                             GetSourceLocation(Token.line, Token.end_column));
 }
 
-// Looks up a RecordDecl by name in a Context.
-const clang::RecordDecl* LookupRecordDecl(const clang::DeclContext* Context,
+const clang::RecordDecl* LookupRecordDecl(const clang::ASTContext& ASTContext,
+                                          const clang::DeclContext* Context,
                                           llvm::StringRef FullName) {
-  while (!FullName.empty()) {
+  while (Context && !FullName.empty()) {
     const std::pair<llvm::StringRef, llvm::StringRef> Parts =
         FullName.split("::");
-    const clang::DeclContext* Next = nullptr;
-    for (auto It = Context->decls_begin(); It != Context->decls_end(); ++It) {
-      if (const clang::NamespaceDecl* Decl =
-              clang::dyn_cast<clang::NamespaceDecl>(*It)) {
-        if (Decl->getName().equals(Parts.first)) {
-          Next = Decl;
-          break;
-        }
-      } else if (const clang::RecordDecl* Decl =
-                     clang::dyn_cast<clang::RecordDecl>(*It)) {
-        if (Decl->getName().equals(Parts.first)) {
-          if (Parts.second.empty()) {
-            return Decl;  // This is the Decl we're looking for.
-          }
-          Next = Decl;
-          break;
-        }
-      }
-    }
-    if (Next == nullptr) {
+    clang::IdentifierInfo& Identifier = ASTContext.Idents.get(Parts.first);
+    const auto result = Context->lookup(&Identifier);
+    if (result.empty() || result.front()->isInvalidDecl()) {
       return nullptr;
     }
+    Context = clang::dyn_cast<clang::DeclContext>(
+        result.front()->getCanonicalDecl());
     FullName = Parts.second;
-    Context = Next;
   }
-  return nullptr;
+  return clang::dyn_cast<clang::RecordDecl>(Context);
 }
 
 }  // namespace
 
 bool GoogleProtoLibrarySupport::CompilationUnitHasParseProtoHelperDecl(
-    const clang::CallExpr& Expr) {
+    const clang::ASTContext& ASTContext, const clang::CallExpr& Expr) {
   if (!Initialized) {
     Initialized = true;
     // Find the root namespace.
-    const clang::DeclContext* Context = Expr.getCalleeDecl()->getDeclContext();
-    while (!Context->isTranslationUnit()) {
-      Context = Context->getParent();
-    }
+    const clang::DeclContext* const TranslationUnitContext =
+        Expr.getCalleeDecl()->getTranslationUnitDecl();
     // Look for ParseProtoHelper.
     ParseProtoHelperDecl =
-        LookupRecordDecl(Context, FLAGS_parseprotohelper_full_name.c_str());
+        LookupRecordDecl(ASTContext, TranslationUnitContext,
+                         FLAGS_parseprotohelper_full_name);
   }
   return ParseProtoHelperDecl != nullptr;
 }
@@ -303,7 +292,7 @@ bool GoogleProtoLibrarySupport::CompilationUnitHasParseProtoHelperDecl(
 void GoogleProtoLibrarySupport::InspectCallExpr(
     IndexerASTVisitor& V, const clang::CallExpr* CallExpr,
     const GraphObserver::Range& Range, GraphObserver::NodeId& CalleeId) {
-  if (!CompilationUnitHasParseProtoHelperDecl(*CallExpr)) {
+  if (!CompilationUnitHasParseProtoHelperDecl(V.getASTContext(), *CallExpr)) {
     // Return early if there is no ParseProtoHelper in the compilation unit.
     return;
   }
@@ -384,9 +373,9 @@ void GoogleProtoLibrarySupport::InspectCallExpr(
         V.ExplicitRangeInCurrentContext(Range).primary(), LiteralId,
         V.BuildNodeIdForDecl(&AccessorDecl));
   };
-  ParseTextProtoHandler Handler(Callback, Literal, V.getASTContext(),
-                                *V.getGraphObserver().getLangOptions());
-  Handler.Parse(*Expr->getType()->getAsCXXRecordDecl());
+  ParseTextProtoHandler::Parse(
+      Callback, Literal, *Expr->getType()->getAsCXXRecordDecl(),
+      V.getASTContext(), *V.getGraphObserver().getLangOptions());
 }
 
 }  // namespace kythe
