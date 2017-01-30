@@ -503,6 +503,11 @@ public:
   RangeInCurrentContext(const MaybeFew<GraphObserver::NodeId> &Id,
                         const clang::SourceRange &SR);
 
+  /// Blames a call to `Callee` at `Range` on everything at the top of
+  /// `BlameStack` (or does nothing if there's nobody to blame).
+  void RecordCallEdges(const GraphObserver::Range &Range,
+                       const GraphObserver::NodeId &Callee);
+
 private:
   friend class PruneCheck;
 
@@ -703,11 +708,6 @@ private:
   /// A stack of ID groups to use when assigning blame for references (such as
   /// function calls).
   std::vector<SomeNodes> BlameStack;
-
-  /// Blames a call to `Callee` at `Range` on everything at the top of
-  /// `BlameStack` (or does nothing if there's nobody to blame).
-  void RecordCallEdges(const GraphObserver::Range &Range,
-                       const GraphObserver::NodeId &Callee);
 
   /// \brief Visit a DeclRefExpr or a ObjCIvarRefExpr
   ///

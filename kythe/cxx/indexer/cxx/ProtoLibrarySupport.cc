@@ -368,14 +368,11 @@ void GoogleProtoLibrarySupport::InspectCallExpr(
 
   CHECK(Literal);
 
-  const auto LiteralId =
-      V.BuildNodeIdForExpr(Literal, IndexerASTVisitor::EmitRanges::No)
-          .primary();
-  const auto Callback = [&V, &LiteralId](
+  const auto Callback = [&V](
       const clang::CXXMethodDecl& AccessorDecl,
       const clang::SourceRange& Range) {
-    V.getGraphObserver().recordCallEdge(
-        V.ExplicitRangeInCurrentContext(Range).primary(), LiteralId,
+    V.RecordCallEdges(
+        V.ExplicitRangeInCurrentContext(Range).primary(),
         V.BuildNodeIdForDecl(&AccessorDecl));
   };
   ParseTextProtoHandler::Parse(
