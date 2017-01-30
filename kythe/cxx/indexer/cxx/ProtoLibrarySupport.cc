@@ -36,6 +36,8 @@
 
 #include "ProtoLibrarySupport.h"
 
+#include <map>
+
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/ExprCXX.h"
 #include "gflags/gflags.h"
@@ -78,6 +80,15 @@ class ParseTextProtoHandler {
                     const clang::LangOptions& LangOpts);
 
  private:
+  struct LineColumnPair {
+    LineColumnPair(int Line, int Column) : Line(Line), Column(Column) {}
+    bool operator<(const LineColumnPair& O) const {
+      return std::tie(Line, Column) < std::tie(O.Line, O.Column);
+    }
+    int Line = 0;
+    int Column = 0;
+  };
+
   // Creates a ParseTextProtoHandler that parses the given value and calls
   // found_field on findings. All objects should remain valid for the
   // lifetime of the handler.
@@ -97,7 +108,8 @@ class ParseTextProtoHandler {
   bool ParseFieldValue(const clang::CXXMethodDecl& AccessorDecl);
 
   // Returns the source location/range of a given position/token.
-  clang::SourceLocation GetSourceLocation(int line, int column) const;
+  clang::SourceLocation GetSourceLocation(
+      const LineColumnPair& LineColumn) const;
   clang::SourceRange GetTokenSourceRange(
       const Tokenizer::Token& Token) const;
 
@@ -108,9 +120,9 @@ class ParseTextProtoHandler {
   google::protobuf::io::ArrayInputStream IStream;
   LogErrors Errors;
   Tokenizer TextTokenizer;
-  // Index of line to byte offset in the string literal. See comment in
-  // constructor.
-  std::vector<int> LineToOffset;
+  // Index of token (line,column) to byte offset in the string literal. See
+  // comment in constructor.
+  std::map<LineColumnPair, int> LineColumnToOffset;
 };
 
 const clang::CXXMethodDecl* FindAccessorDeclWithName(
@@ -134,14 +146,25 @@ ParseTextProtoHandler::ParseTextProtoHandler(
       IStream(Literal->getBytes().data(), Literal->getBytes().size()),
       TextTokenizer(&IStream, &Errors) {
   // We're building this table so that we can map io::Tokenizer lines and
-  // columns back to byte offsets in the string literal.
+  // columns back to byte offsets in the string literal. See
+  // Tokenizer::NextChar() for why we're doing this.
   // TODO(courbet): It would be much better to add support for byte offset in
   // the tokenizer directly.
-  LineToOffset.push_back(0);
-  for (int i = 0; i < Literal->getBytes().size(); ++i) {
-    if (Literal->getBytes()[i] == '\n') {
-      LineToOffset.push_back(i + 1);
+  LineColumnPair LineColumn(0, 0);
+  constexpr const int kTokenizerTabWidth = 8;
+  LineColumnToOffset[LineColumn] = 0;
+  for (int ByteOffset = 0; ByteOffset < Literal->getBytes().size();
+       ++ByteOffset) {
+    const char c = Literal->getBytes()[ByteOffset];
+    if (c == '\n') {
+      ++LineColumn.Line;
+      LineColumn.Column = 0;
+    } else if (c == '\t') {
+      LineColumn.Column += kTokenizerTabWidth - LineColumn.Column % kTokenizerTabWidth;
+    } else {
+      ++LineColumn.Column;
     }
+    LineColumnToOffset[LineColumn] = ByteOffset + 1;
   }
 }
 
@@ -168,7 +191,6 @@ bool ParseTextProtoHandler::ParseMsg(const clang::CXXRecordDecl& MsgDecl,
           return false;
         }
         CHECK_GE(Token.line, 0);
-        CHECK_LT(Token.line, LineToOffset.size());
         FoundField(*AccessorDecl, GetTokenSourceRange(Token));
         if (!ParseFieldValue(*AccessorDecl)) {
           return false;
@@ -247,16 +269,18 @@ bool ParseTextProtoHandler::ParseFieldValue(
 }
 
 clang::SourceLocation ParseTextProtoHandler::GetSourceLocation(
-    const int line, const int column) const {
-  return Literal->getLocationOfByte(LineToOffset[line] + column,
-                                    Context.getSourceManager(), LangOpts,
-                                    Context.getTargetInfo());
+    const LineColumnPair& LineColumn) const {
+  const auto OffsetIt = LineColumnToOffset.find(LineColumn);
+  CHECK(OffsetIt != LineColumnToOffset.end());
+  return Literal->getLocationOfByte(
+      OffsetIt->second, Context.getSourceManager(), LangOpts,
+      Context.getTargetInfo());
 }
 
 clang::SourceRange ParseTextProtoHandler::GetTokenSourceRange(
     const Tokenizer::Token& Token) const {
-  return clang::SourceRange(GetSourceLocation(Token.line, Token.column),
-                            GetSourceLocation(Token.line, Token.end_column));
+  return clang::SourceRange(GetSourceLocation({Token.line, Token.column}),
+                            GetSourceLocation({Token.line, Token.end_column}));
 }
 
 const clang::RecordDecl* LookupRecordDecl(const clang::ASTContext& ASTContext,

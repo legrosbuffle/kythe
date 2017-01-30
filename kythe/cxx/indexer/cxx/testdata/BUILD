@@ -1102,7 +1102,15 @@ cxx_indexer_test(
     srcs = ["libraries/proto_parsetextproto.cc"],
     ignore_dups = True,
     tags = ["libraries"],
-    deps = ["libraries/proto_parsetextproto.h"],
+    deps = ["libraries/parsetextproto.h", "libraries/message.proto.h"],
+)
+
+cxx_indexer_test(
+    name = "proto_parsetextproto_tabs",
+    srcs = ["libraries/proto_parsetextproto_tabs.cc"],
+    ignore_dups = True,
+    tags = ["libraries"],
+    deps = ["libraries/parsetextproto.h", "libraries/message.proto.h"],
 )
 
 test_suite(
