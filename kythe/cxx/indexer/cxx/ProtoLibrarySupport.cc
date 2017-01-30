@@ -17,9 +17,10 @@
 // This file uses the Clang style conventions.
 
 // Implementation notes:
-// The proto indexer outputs searchable names for cpp calls to proto
-// getters/setters, and links them to the original fields in the protobuf
-// message definition.
+// The proto indexer and the proto compiler collaborate through metadata to link
+// generated code back to the protobuf definitions. In our case, we care about
+// the fact that generated getters are linked to to the original fields.
+//
 // The idea is that we're not going to refer to the original proto fields
 // directly. Instead, we're going to emit references from sections of the string
 // literal being parsed to the corresponding getters of generated cpp classes.
@@ -107,6 +108,8 @@ class ParseTextProtoHandler {
   google::protobuf::io::ArrayInputStream IStream;
   LogErrors Errors;
   Tokenizer TextTokenizer;
+  // Index of line to byte offset in the string literal. See comment in
+  // constructor.
   std::vector<int> LineToOffset;
 };
 
@@ -130,6 +133,8 @@ ParseTextProtoHandler::ParseTextProtoHandler(
       FoundField(FoundField),
       IStream(Literal->getBytes().data(), Literal->getBytes().size()),
       TextTokenizer(&IStream, &Errors) {
+  // We're building this table so that we can map io::Tokenizer lines and
+  // columns back to byte offsets in the string literal.
   // TODO(courbet): It would be much better to add support for byte offset in
   // the tokenizer directly.
   LineToOffset.push_back(0);
