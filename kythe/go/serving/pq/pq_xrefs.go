@@ -393,7 +393,7 @@ func (d *DB) CrossReferences(ctx context.Context, req *xpb.CrossReferencesReques
 				return nil, err
 			}
 			if xrs != nil && xrs.Ticket != ticket {
-				if len(xrs.Definition) > 0 || len(xrs.Documentation) > 0 || len(xrs.Reference) > 0 || len(xrs.RelatedNode) > 0 {
+				if len(xrs.Definition) > 0 || len(xrs.Reference) > 0 || len(xrs.RelatedNode) > 0 || len(xrs.Caller) > 0 {
 					reply.CrossReferences[xrs.Ticket] = xrs
 				}
 				xrs = nil
@@ -408,11 +408,6 @@ func (d *DB) CrossReferences(ctx context.Context, req *xpb.CrossReferencesReques
 				if err != nil {
 					return nil, err
 				}
-			case xrefs.IsDocKind(req.DocumentationKind, kind):
-				xrs.Documentation, err = addRelatedAnchor(xrs.Documentation, rec, req.AnchorText)
-				if err != nil {
-					return nil, err
-				}
 			case xrefs.IsRefKind(req.ReferenceKind, kind):
 				xrs.Reference, err = addRelatedAnchor(xrs.Reference, rec, req.AnchorText)
 				if err != nil {
@@ -420,7 +415,7 @@ func (d *DB) CrossReferences(ctx context.Context, req *xpb.CrossReferencesReques
 				}
 			}
 		}
-		if xrs != nil && (len(xrs.Definition) > 0 || len(xrs.Documentation) > 0 || len(xrs.Reference) > 0 || len(xrs.RelatedNode) > 0) {
+		if xrs != nil && (len(xrs.Definition) > 0 || len(xrs.Reference) > 0 || len(xrs.RelatedNode) > 0) || len(xrs.Caller) > 0 {
 			reply.CrossReferences[xrs.Ticket] = xrs
 		}
 
@@ -512,15 +507,13 @@ func (d *DB) scanReferences(fileTicket string, norm *xrefs.Normalizer) ([]*xpb.D
 
 	var references []*xpb.DecorationsReply_Reference
 	for rs.Next() {
-		r := &xpb.DecorationsReply_Reference{
-			AnchorStart: &xpb.Location_Point{},
-			AnchorEnd:   &xpb.Location_Point{},
-		}
-		if err := rs.Scan(&r.SourceTicket, &r.Kind, &r.TargetTicket, &r.AnchorStart.ByteOffset, &r.AnchorEnd.ByteOffset); err != nil {
+		r := &xpb.DecorationsReply_Reference{}
+		var ticket string
+		var start, end int32
+		if err := rs.Scan(&ticket, &r.Kind, &r.TargetTicket, &start, &end); err != nil {
 			return nil, fmt.Errorf("sql scan error: %v", err)
 		}
-		r.AnchorStart = norm.Point(r.AnchorStart)
-		r.AnchorEnd = norm.Point(r.AnchorEnd)
+		r.Span = norm.SpanOffsets(start, end)
 		references = append(references, r)
 	}
 

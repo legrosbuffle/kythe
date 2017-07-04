@@ -19,8 +19,8 @@
 //   reads the names of .kindex files from standard input or an
 //   index pack and emits a static claim assignment to standard output
 
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 
 #include <iostream>
 #include <map>
@@ -181,7 +181,7 @@ class ClaimTool {
       ++total_input_count_;
       if (input.context().row_size()) {
         VName input_vname = input.v_name();
-        if (input_vname.signature().size()) {
+        if (!input_vname.signature().empty()) {
           // We generally expect that file vnames have no signature.
           // If this happens, we'll emit a warning, but we'll also be sure to
           // keep the signature around as a suffix when building vnames for

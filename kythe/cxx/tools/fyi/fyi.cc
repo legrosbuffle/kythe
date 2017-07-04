@@ -107,7 +107,7 @@ class FileTracker {
       state_ = State::kSuccess;
       return false;
     }
-    if (untried_.size()) {
+    if (!untried_.empty()) {
       auto to_try = *untried_.begin();
       untried_.erase(untried_.begin());
       tried_.insert(to_try);
@@ -365,8 +365,7 @@ class Action : public clang::ASTFrontendAction,
 
   /// \brief Adds the paths of all /kythe/node/file nodes from `reply.node` to
   /// this Action's `FileTracker`'s include list.
-  template <typename Reply>
-  void AddFileNodesToTracker(const Reply &reply) {
+  template <typename Reply> void AddFileNodesToTracker(const Reply &reply) {
     for (const auto &parent : reply.nodes()) {
       bool is_file = false;
       for (const auto &fact : parent.second.facts()) {
@@ -645,7 +644,7 @@ bool ActionFactory::runInvocation(
            ShouldRunAgain());
   if (action->tracker()->state() != FileTracker::State::kFailure) {
     const auto buffer = action->tracker()->backing_store();
-    if (buffer.size()) {
+    if (!buffer.empty()) {
       printf("%s", buffer.str().c_str());
     }
   }

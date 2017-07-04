@@ -1,2 +1,2 @@
-//- [   ]   
-//- [Aaa bbb Ccc]
+//- [  // comment ]   
+//- [_Aaa bbb _Ccc]

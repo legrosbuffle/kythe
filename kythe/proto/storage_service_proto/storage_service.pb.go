@@ -29,7 +29,9 @@ var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
-const _ = proto.ProtoPackageIsVersion1
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
@@ -37,7 +39,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion4
 
 // Client API for GraphStore service
 
@@ -249,6 +251,7 @@ var _GraphStore_serviceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
+	Metadata: "kythe/proto/storage_service.proto",
 }
 
 // Client API for ShardedGraphStore service
@@ -377,11 +380,14 @@ var _ShardedGraphStore_serviceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
+	Metadata: "kythe/proto/storage_service.proto",
 }
+
+func init() { proto.RegisterFile("kythe/proto/storage_service.proto", fileDescriptorStorageService) }
 
 var fileDescriptorStorageService = []byte{
 	// 248 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xe2, 0x52, 0xcc, 0xae, 0x2c, 0xc9,
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0xcc, 0xae, 0x2c, 0xc9,
 	0x48, 0xd5, 0x2f, 0x28, 0xca, 0x2f, 0xc9, 0xd7, 0x2f, 0x2e, 0xc9, 0x2f, 0x4a, 0x4c, 0x4f, 0x8d,
 	0x2f, 0x4e, 0x2d, 0x2a, 0xcb, 0x4c, 0x4e, 0xd5, 0x03, 0x8b, 0x0a, 0x71, 0x83, 0x95, 0x40, 0x38,
 	0x52, 0x92, 0x58, 0xd4, 0x43, 0xa4, 0x8c, 0xf6, 0x33, 0x72, 0x71, 0xb9, 0x17, 0x25, 0x16, 0x64,

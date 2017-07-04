@@ -41,7 +41,7 @@ following rules:
     the input.
 
 Additional rules govern the generation of VNames for certain kinds of nodes,
-most notably <<name,names>>. These nodes are frequently used as points
+most notably <<file,files>>. These nodes are frequently used as points
 for linking together the output of discrete indexer runs and may have greater
 stability properties than may be derived using the preceding VName rules.
 
@@ -171,6 +171,11 @@ Notes::
     assigned any subtype of Object, but no primitive type.
   * It is possible for an <<absvar>> to have multiple bounds. For example, this
     occurs in Java when a type parameter must implement several interfaces.
+    In cases where the order of the bounds matters (e.g., in Java, where the
+    order affects type erasure), the bound edge kind may be qualified by an ordinal,
+    so that A is *bounded/upper.N* by B if B is the Nth upper bound of A.
+    Code interpreting *bounded* edges should be able to handle both
+    ordered and unordered edges.
 
 [kythe,Java,"Generic type parameters can be bound."]
 --------------------------------------------------------------------------------
@@ -208,8 +213,8 @@ public class E {
   //- @objAndOneIFaceBound defines/binding OIFunc
   //- @S1 defines/binding S1Var
   //- @List ref List
-  //- S1Var bounded/upper Obj
-  //- S1Var bounded/upper List
+  //- S1Var bounded/upper.0 Obj
+  //- S1Var bounded/upper.1 List
   public <S1 extends Object & java.util.List> void objAndOneIFaceBound() {}
 
 }
@@ -436,11 +441,13 @@ depends
 ~~~~~~~
 
 Brief description::
-  A *depends* B if processing of A depends on the existence or presence of B.
+  A *depends* B if processing of A depends on the existence or presence of B. For example, if a
+  process depends a set of files and/or processes. Another example, a file depends upon a process
+  which outputs said file.
 Commonly arises from::
   build dependencies
 Points from::
-  <<process>>
+  <<process>>, <<file>>
 Points toward::
   <<process>>, <<file>>
 Ordinals are used::
@@ -480,6 +487,44 @@ int v;   //- @"/// An empty class." documents ClassC
          //- ClassC.node/kind record
 /// An empty class.
 class C { };
+--------------------------------------------------------------------------------
+
+[[exports]]
+exports
+~~~~~~~~
+Brief description::
+  A *exports* B if process node A exports process node B.
+Commonly arises from::
+  build rules
+Points from::
+  process nodes
+Points toward::
+  process nodes
+Orginals are used::
+  never
+See also::
+  <<process>>
+Notes::
+  Tools like bazel have cases where build rules export other build rules, wherein the closure of all
+  rules reached via exports attributes are considered direct dependencies of any rule that directly
+  depends on the target with exports. The exports are not direct dependencies of the rule they belong
+  to.
+
+[kythe,clike,"Process node exports other process node."]
+--------------------------------------------------------------------------------
+//- ProcessNodeA.node/kind process
+//- ProcessNodeB.node/kind process
+//- ProcessNodeA exports ProcessNodeB
+java_library(
+  name = "A",
+  exports = [
+    ":B",
+  ],
+)
+
+java_library(
+  name = "B",
+)
 --------------------------------------------------------------------------------
 
 [[extends]]
@@ -692,39 +737,6 @@ template <typename T> struct S {
 };
 --------------------------------------------------------------------------------
 
-[[named]]
-named
-~~~~~
-
-Brief description::
-  A *named* B if B identifies A.
-Commonly arises from::
-  definitions and declarations
-Points from::
-  semantic nodes
-Points toward::
-  names
-Ordinals are used::
-  never
-See also::
-  <<name>>
-
-[kythe,C++,"Variables have names."]
---------------------------------------------------------------------------------
-//- @x defines/binding VariableX
-//- VariableX named NameX
-int x;
---------------------------------------------------------------------------------
-
-[kythe,Java,"Classes have names."]
---------------------------------------------------------------------------------
-package pkg;
-//- @E defines/binding ClassE
-//- ClassE named vname("pkg.E","","","","java")
-public class E {
-}
---------------------------------------------------------------------------------
-
 [[overrides]]
 overrides
 ~~~~~~~~~
@@ -850,7 +862,8 @@ Ordinals are used::
 
 [kythe,C++,"Type applications have parameters."]
 --------------------------------------------------------------------------------
-//- @"int*" ref PtrInt
+//- @T defines/binding AliasT
+//- AliasT aliases PtrInt
 //- PtrInt param.0 PointerConstructor
 //- PtrInt param.1 IntType
 using T = int*;
@@ -964,6 +977,23 @@ Notes::
 int FOO;
 --------------------------------------------------------------------------------
 
+[[reffile]]
+ref/file
+~~~~~~~~
+
+Brief description::
+  A *ref/file* F if A is an anchor referencing a file F. This is distinct from
+  <<refincludes,[ref/includes]>>, which indicates that the anchor causes the contents of
+  `F` to be inserted into the surrounding file. *ref/file* should be used when the
+  anchor refers explicitly to the identity of `F`, as in a hardcoded path in a test or
+  build script.
+Points from::
+  <<anchor>>
+Points toward::
+  <<file>>
+Ordinals are used::
+  never
+
 [[refexpandstransitive]]
 ref/expands/transitive
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -1050,6 +1080,39 @@ Ordinals are used::
 // ...
 --------------------------------------------------------------------------------
 
+[[refinit]]
+ref/init
+~~~~~~~~
+
+Brief description::
+  A *ref/init* B if A is an anchor attached to an expression that initializes B,
+  typically a field or variable.
+Points from::
+  anchors
+Points toward::
+  semantic nodes
+Ordinals are used::
+  never
+
+[kythe,Go,"Initializer expressions init their fields."]
+--------------------------------------------------------------------------------
+package p
+
+type S struct {
+  //- @F defines/binding Field
+  F int
+}
+
+// Positional
+//- @"17" ref/init Field
+var _ = S{17}
+
+// Key-value
+//- @F ref Field
+//- @"101" ref/init Field
+var _ = S{F: 101}
+--------------------------------------------------------------------------------
+
 [[refqueries]]
 ref/queries
 ~~~~~~~~~~~
@@ -1059,21 +1122,51 @@ Brief description::
 Points from::
   anchors
 Points toward::
-  <<macro,macros>>, <<name,names>>
+  <<macro,macros>>
 Ordinals are used::
   never
 
-[kythe,C++,"Queries can be bound or unbound."]
+[kythe,C++,"Queries to bound macros are recorded."]
 --------------------------------------------------------------------------------
 //- @FOO defines/binding MacroFoo
 #define FOO BAR
 //- @FOO ref/queries MacroFoo
-//- MacroFoo named vname("FOO#m",_,_,_,_)
+//- MacroFoo.node/kind macro
 #if defined(FOO)
 #endif
-//- @BAZ ref/queries vname("BAZ#m",_,_,_,_)
+//- !{@BAZ ref/queries _}
 #ifdef BAZ
 #endif
+--------------------------------------------------------------------------------
+
+[[satisfies]]
+satisfies
+~~~~~~~~~
+
+Brief description::
+  A *satisfies* T if A is a concrete type that satisfies an interface type T.
+Points from::
+  type nodes (<<record>>)
+Points toward::
+  <<interface>>
+Ordinals are used::
+  never
+
+[kythe,Go,"Concrete types satisfy nearby interfaces."]
+--------------------------------------------------------------------------------
+package sat
+
+//- @Badger defines/binding Badger
+//- Badger.node/kind interface
+type Badger interface { HasBadge() bool }
+
+//- @SB defines/binding StaticBadger
+//- StaticBadger satisfies Badger
+type SB bool
+
+//- @HasBadge defines/binding HasBadge
+//- HasBadge childof StaticBadger
+func (s SB) HasBadge() bool { return bool(s) }
 --------------------------------------------------------------------------------
 
 [[specializes]]
@@ -1124,6 +1217,21 @@ specializes/speculative
 See <<instantiatesspeculative,[instantiates/speculative]>>.
 
 
+[[tagged]]
+tagged
+~~~~~~
+
+Brief description::
+  A *tagged* B if B labels A with a <<diagnostic>> message.
+Commonly arises from::
+  build/analysis errors
+Points from::
+  <<anchor>>, <<file>>
+Points toward::
+  <<diagnostic>>
+Ordinals are used::
+  never
+
 [[typed]]
 typed
 ~~~~~
@@ -1168,6 +1276,31 @@ Points toward::
 //- @FOO defines/binding DifferentMacroFoo
 #define FOO BAZ
 --------------------------------------------------------------------------------
+
+Common node facts
+-----------------
+
+[[code]]
+code
+~~~~
+
+Brief description:
+  A node's *code* is a serialized link:marked-source.html[MarkedSource]
+  message that can be used to describe that node.
+Attached to::
+  semantic nodes
+
+[[docuri]]
+doc/uri
+~~~~~~~
+
+Brief description::
+  If this node's primary documentation exists outside the graph, this fact can
+  hold a URI pointing to that documentation. For example, you may want to link
+  builtin functions to their definitions in a language's reference manual.
+
+Attached to::
+  semantic nodes
 
 Node kinds
 ----------
@@ -1242,25 +1375,25 @@ anchor
 Brief description::
   An *anchor* connects concrete syntax to abstract syntax.
 Naming convention::
-  Language:::
-    No special rules.
   Path:::
-    The *Path* of the <<file>> this anchor is <<childof>> (or empty if there is
-    no such file).
+    The *Path* of the <<file>> containing this anchor (or empty if there is no
+    such file).
   Root:::
-    The *Root* of the <<file>> this anchor is <<childof>>.
+    The *Root* of the <<file>> containing this anchor.
   Corpus:::
-    The *Corpus* of the <<file>> this anchor is <<childof>>.
-  Signature:::
-    No special rules.
+    The *Corpus* of the <<file>> containing this anchor.
 Expected out-edges::
-  <<childof>>
+  <<defines>>, <<definesbinding,[defines/binding]>>, <<ref>>,
+  <<refcall,[ref/call]>>
 Facts::
   loc/start:::
-    The starting byte offset (from 0) in the <<file>> this anchor is <<childof>>
+    The starting byte offset (from 0) in the <<file>> containing this anchor.
   loc/end:::
-    The ending byte offset (exclusive) in the <<file>> this anchor is
-    <<childof>>
+    The ending byte offset (exclusive) in the <<file>> containing this anchor.
+  snippet/start:::
+    The starting byte offset (from 0) of the snippet for this anchor (optional).
+  snippet/end:::
+    The ending byte offset (from 0) of the snippet for this anchor (optional).
   subkind::
     If set to `implicit`, this anchor should not also have `loc/start` or
     `loc/end` facts. It is an artifact of some internal process that may still
@@ -1269,8 +1402,8 @@ See also::
   <<file>>
 
 Anchor VNames are specified such that one may determine the VName of the
-<<file>> an anchor is <<childof>> by dropping the anchor VName's *Language*
-and *Signature* fields.
+<<file>> containing an anchor by dropping the anchor VName's *Language* and
+*Signature* fields.
 
 [kythe,C++,"Anchors have byte offsets."]
 --------------------------------------------------------------------------------
@@ -1317,7 +1450,6 @@ D d;
 //- ImplicitCallToCCtor childof DCtor
 --------------------------------------------------------------------------------
 
-
 [kythe,Java,"Anchors have VName rules."]
 --------------------------------------------------------------------------------
 public class E {
@@ -1325,6 +1457,13 @@ public class E {
   int foo;
 }
 //- File=vname("",Corpus,Root,Path,"").node/kind file
+--------------------------------------------------------------------------------
+
+[kythe,Go,"Anchors have VName rules."]
+--------------------------------------------------------------------------------
+//- @anchor=vname(_,Corpus,Root,Path,"go").node/kind anchor
+//- File=vname("",Corpus,Root,Path,"").node/kind file
+package anchor
 --------------------------------------------------------------------------------
 
 [[constant]]
@@ -1357,6 +1496,26 @@ public enum E {
   A;
 }
 --------------------------------------------------------------------------------
+
+[[diagnostic]]
+diagnostic
+~~~~~~~~~~
+
+Brief description::
+  A *diagnostic* is a node with a message concerning some aspect of the related
+  <<file>> or <<anchor>>.  These can often result from errors while building or
+  analyzing a compilation and allow an analyzer to surface errors to end-users.
+Facts::
+  message:::
+    A relatively short, one-line, human-readable string explaining the
+    diagnostic.  The encoding must be UTF-8.
+  details:::
+    Longer form of the message that exposes more detail concerning the
+    diagnostic.  This could be very specialized to the particular diagnostic,
+    possibly even containing stack traces or build system logs (optional).
+  context/url:::
+    URL leading to more detailed information concerning this diagnostic or a
+    related group of diagnostics (optional).
 
 [[doc]]
 doc
@@ -1454,7 +1613,7 @@ Facts::
     definition.
   subkind:::
     `constructor` for constructors; `destructor` for destructors;
-    `none` or unspecified for normal or member functions
+    `none` or unspecified for normal or member functions.
 
 [kythe,C++,"Functions are functions."]
 --------------------------------------------------------------------------------
@@ -1558,32 +1717,6 @@ Naming convention::
 //- vname("tapp#meta","","","","c++").node/kind meta
 --------------------------------------------------------------------------------
 
-[[name]]
-name
-~~~~
-
-Brief description::
-  A *name* identifies zero or more nodes.
-Naming convention::
-  Signature:::
-    *language-specific-string*#*language-specific-tag*
-  Language:::
-    See <<lsr,Language-specific rules>> for language identifiers.
-Notes::
-  See the <<lsr,Language-specific rules>> section below for name formation
-  rules.
-
-[kythe,C++,"Declarations and definitions share the same name."]
---------------------------------------------------------------------------------
-//- @C defines/binding CDecl
-class C;
-//- @C defines/binding CDefn
-class C { };
-//- CDecl named CName=vname("C#c","","","","c++")
-//- CDefn named CName
-//- CName.node/kind name
---------------------------------------------------------------------------------
-
 [[package]]
 package
 ~~~~~~
@@ -1594,7 +1727,6 @@ Brief description::
 [kythe,Java,"Top-level declarations are children of package nodes."]
 --------------------------------------------------------------------------------
 //- @pkg ref Pkg
-//- Pkg named vname("pkg","","","","java")
 //- Pkg.node/kind package
 package pkg;
 //- @E defines/binding ClassE
@@ -1608,7 +1740,7 @@ public class E {}
 //- Pkg.node/kind package
 package foo
 
-//- File = vname("", "kythe", _, "kythe/schema/example.go", "").node/kind file
+//- File = vname("", _, _, "kythe/schema/example.go", "").node/kind file
 //- File childof Pkg
 --------------------------------------------------------------------------------
 
@@ -1714,6 +1846,25 @@ enum class E : int { };
 public enum E {}
 --------------------------------------------------------------------------------
 
+[[symbol]]
+symbol
+~~~~~~
+
+Brief description::
+  A *symbol* is a common name used by tools to refer to a set of objects.
+  The spelling of a symbol is defined per language, and should be constructible by
+  tools that do not necessarily have direct access to the compiler.
+  The rules for binding a symbol to a particular object from this set may depend on
+  external configuration (such as the list of libraries being linked together to produce
+  an executable).
+Naming convention::
+  Path:::
+    *empty*
+  Root:::
+    *empty*
+  Corpus:::
+    *empty*
+
 [[talias]]
 talias
 ~~~~~~
@@ -1721,7 +1872,7 @@ talias
 Brief description::
   A *talias* gives a new name to an existing type.
 Expected out-edges::
-  <<aliases>>, <<named>>
+  <<aliases>>
 Notes::
   A *talias* may be virtually removed from the graph. Some languages may have
   additional reduction rules.
@@ -1744,7 +1895,8 @@ Expected out-edges::
 
 [kythe,C++,"Pointers are type constructors."]
 --------------------------------------------------------------------------------
-//- @"int*" ref IntPtrType
+//- @PtrInt defines/binding PtrIntAlias
+//- PtrIntAlias aliases IntPtrType
 using PtrInt = int*;
 //- IntPtrType.node/kind tapp
 //- IntPtrType param.0 vname("ptr#builtin",_,_,_,"c++")
@@ -1783,8 +1935,6 @@ tnominal
 
 Brief description::
   A *tnominal* is a type that may be purely identified by its name.
-Expected out-edges::
-  <<named>>
 Notes::
   When a `tnominal`'s definition is known, some <<lsr,language-specific rules>>
   dictate that the definition node be used instead of a `tnominal` in the
@@ -1794,12 +1944,11 @@ Notes::
 --------------------------------------------------------------------------------
 //- @C defines/binding ClassC
 //- ClassC.node/kind record
-//- ClassC named ClassCName
 class C;
-//- @"C*" ref PtrC
+//- @Alias defines/binding Alias
+//- Alias aliases PtrC
 //- PtrC param.1 NominalC
 //- NominalC.node/kind tnominal
-//- NominalC named ClassCName
 using Alias = C*;
 --------------------------------------------------------------------------------
 
@@ -1821,10 +1970,11 @@ void f(Ts... ts) { }
 
 //- @int ref IntType
 //- @double ref DoubleType
-//- @f ref FnF
+//- @f ref AppFnTFSigma
 int g(double x) { f(1, x); }
 
 //- FnF instantiates AppFnTFSigma
+//- FnF.node/kind function
 //- AppFnTFSigma param.0 FnTF
 //- AppFnTFSigma param.1 Sigma
 //- Sigma.node/kind tsigma
@@ -1994,7 +2144,8 @@ $$C++$$ supplies the following <<tbuiltin>> nodes by default:
 //- @"void" ref vname("void#builtin","","","","c++")
 using Void = void;
 
-//- @"void*" ref TappPtrVoid
+//- @PtrVoid defines/binding AliasTappPtrVoid
+//- AliasTappPtrVoid aliases TappPtrVoid
 //- TappPtrVoid param.0 vname("ptr#builtin","","","","c++")
 using PtrVoid = void*;
 
@@ -2050,55 +2201,6 @@ enum E { };
 enum class EC;
 --------------------------------------------------------------------------------
 
-Names
-^^^^^
-
-$$C++$$ defines the following language-specific tags for lexically scoped names:
-
-  * `m`: macros (see <<macro>>)
-  * `c`: class or struct (see <<record>>)
-  * `u`: union (see <<record>>)
-  * `n`: any other name
-
-A $$C++$$ lexically-scoped name is stored as a colon-delimited path, starting
-with the most specific name and ending with the most general.
-
-[kythe,C++,"Lexically scoped names"]
---------------------------------------------------------------------------------
-//- @C defines/binding ClassC
-//- ClassC named vname("C#c",_,_,_,_)
-class C;
-namespace A {
-//- @D defines/binding ClassD
-//- ClassD named vname("D:A#c",_,_,_,_)
-  class D;
-  namespace B {
-//- @E defines/binding ClassE
-//- ClassE named vname("E:B:A#c",_,_,_,_)
-    class E;
-  }
-}
---------------------------------------------------------------------------------
-
-Anonymous namespaces are represented using `@#anon` and possibly some extra
-(opaque) information. Scopes without names are given ordinal values reflecting
-an arbitrary but consistent ordering between syntactic elements:
-
-[kythe,C++,"Ordinal path nodes in names"]
---------------------------------------------------------------------------------
-void foo() {
-//- @x defines/binding VarNode
-//- VarNode named vname("x:0:0:foo#n",_,_,_,_)
-  int x;
-//- @x defines/binding VarNode2
-//- VarNode2 named vname("x:0:1:0:foo#n",_,_,_,_)
-  { int x; }
-//- @x defines/binding VarNode3
-//- VarNode3 named vname("x:0:2:0:foo#n",_,_,_,_)
-  { int x; }
-}
---------------------------------------------------------------------------------
-
 References to definitions and declarations of types
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -2120,12 +2222,10 @@ If the indexer only has a *complete* $$C++$$ node, or if the node is
 [kythe,C++,"Refer to complete or incomplete declarations indirectly."]
 --------------------------------------------------------------------------------
 //- @E defines/binding CompleteEnumE
-//- CompleteEnumE named EnumEName
 enum class E : int;
 //- @Alias defines/binding EAlias
 //- EAlias aliases EnumETNominal
 //- EnumETNominal.node/kind tnominal
-//- EnumETNominal named EnumEName
 using Alias = E;
 --------------------------------------------------------------------------------
 
@@ -2243,6 +2343,36 @@ Go
 ~~
 
 The source language for Go is spelled "`go`".
+
+Type Definitions
+~~~~~~~~~~~~~~~~
+
+A Go type definition like `type Foo Bar` creates a new named type `Foo` with
+the same structure as `Bar` but with a distinct method set. In the Kythe schema
+we model this as a [[record]] node. If the underlying type is not already a
+struct this node is given the subkind `type`.
+
+[kythe,Go,"Type definitions"]
+--------------------------------------------------------------------------------
+package tdef
+
+//- @Foo defines/binding Foo
+//- Foo.node/kind record
+//- Foo.subkind type
+type Foo int
+
+type bar struct { z int }
+
+//- @Bar defines/binding Bar
+//- Bar.node/kind record
+//- Bar.subkind struct
+type Bar bar
+
+//- @Pbar defines/binding Pbar
+//- Pbar.node/kind record
+//- Pbar.subkind type
+type Pbar []bar
+--------------------------------------------------------------------------------
 
 Java
 ~~~~

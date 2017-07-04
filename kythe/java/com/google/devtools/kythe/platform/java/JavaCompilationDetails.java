@@ -25,6 +25,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.devtools.kythe.common.FormattingLogger;
 import com.google.devtools.kythe.platform.java.filemanager.CompilationUnitBasedJavaFileManager;
+import com.google.devtools.kythe.platform.java.filemanager.JavaFileStoreBasedFileManager;
 import com.google.devtools.kythe.platform.shared.FileDataProvider;
 import com.google.devtools.kythe.proto.Analysis.CompilationUnit;
 import com.sun.source.tree.CompilationUnitTree;
@@ -39,7 +40,6 @@ import javax.tools.Diagnostic.Kind;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
-import javax.tools.StandardJavaFileManager;
 
 /** Provides a {@link JavacAnalyzer} with access to compilation information. */
 public class JavaCompilationDetails {
@@ -49,6 +49,7 @@ public class JavaCompilationDetails {
   private final CompilationUnit compilationUnit;
   private final Throwable analysisCrash;
   private final Charset encoding;
+  private final JavaFileStoreBasedFileManager fileManager;
 
   private static final FormattingLogger logger =
       FormattingLogger.getLogger(JavaCompilationDetails.class);
@@ -64,35 +65,19 @@ public class JavaCompilationDetails {
       };
 
   public static JavaCompilationDetails createDetails(
-      CompilationUnit compilationUnit, FileDataProvider fileDataProvider, boolean useStdErr) {
-    return createDetails(
-        compilationUnit, fileDataProvider, false, ImmutableList.<Processor>of(), useStdErr);
-  }
-
-  public static JavaCompilationDetails createDetails(
       CompilationUnit compilationUnit,
       FileDataProvider fileDataProvider,
-      boolean isLocalAnalysis,
       List<Processor> processors) {
-    return createDetails(compilationUnit, fileDataProvider, isLocalAnalysis, processors, false);
-  }
-
-  public static JavaCompilationDetails createDetails(
-      CompilationUnit compilationUnit,
-      FileDataProvider fileDataProvider,
-      boolean isLocalAnalysis,
-      List<Processor> processors,
-      boolean useStdErr) {
 
     JavaCompiler compiler = JavacAnalysisDriver.getCompiler();
     DiagnosticCollector<JavaFileObject> diagnosticsCollector = new DiagnosticCollector<>();
 
     // Get the compilation options
-    List<String> options = optionsFromCompilationUnit(compilationUnit, processors, isLocalAnalysis);
+    List<String> options = optionsFromCompilationUnit(compilationUnit, processors);
     Charset encoding = JavacOptionsUtils.getEncodingOption(options);
 
-    // Create a StandardFileManager that uses the fileDataProvider and compilationUnit
-    StandardJavaFileManager fileManager =
+    // Create a JavaFileStoreBasedFileManager that uses the fileDataProvider and compilationUnit
+    JavaFileStoreBasedFileManager fileManager =
         new CompilationUnitBasedJavaFileManager(
             fileDataProvider,
             compilationUnit,
@@ -102,8 +87,8 @@ public class JavaCompilationDetails {
     Iterable<? extends JavaFileObject> sources =
         fileManager.getJavaFileObjectsFromStrings(compilationUnit.getSourceFileList());
 
-    // If we use no writer, output will go to stdErr. The NullWriter is /dev/null.
-    Writer javacOut = useStdErr ? null : NullWriter.getInstance();
+    // Causes output to go to stdErr
+    Writer javacOut = null;
 
     // Get a task for compiling the current CompilationUnit.
     JavacTaskImpl javacTask =
@@ -130,7 +115,8 @@ public class JavaCompilationDetails {
         compilationUnits,
         compilationUnit,
         analysisCrash,
-        encoding);
+        encoding,
+        fileManager);
   }
 
   private JavaCompilationDetails(
@@ -139,13 +125,15 @@ public class JavaCompilationDetails {
       Iterable<? extends CompilationUnitTree> asts,
       CompilationUnit compilationUnit,
       Throwable analysisCrash,
-      Charset encoding) {
+      Charset encoding,
+      JavaFileStoreBasedFileManager fileManager) {
     this.javac = javac;
     this.diagnostics = diagnostics;
     this.asts = asts;
     this.compilationUnit = compilationUnit;
     this.analysisCrash = analysisCrash;
     this.encoding = Preconditions.checkNotNull(encoding);
+    this.fileManager = fileManager;
   }
 
   public boolean inBadCompilationState() {
@@ -195,34 +183,26 @@ public class JavaCompilationDetails {
     return encoding;
   }
 
-  /**
-   * Modify options so the compiler can find the classpath and sourcepath. As well as disable any
-   * annotation processor.
-   *
-   * @param isLocalAnalysis when true we do not add jre jars to the classpath. Adding jre jars to
-   *     classpath for local analysis done by {@link
-   *     com.google.devtools.kythe.platform.java.local.LocalJavacAnalysisDriver} will cause the
-   *     analysis to fail.
-   */
-  private static List<String> optionsFromCompilationUnit(
-      CompilationUnit compilationUnit, List<Processor> processors, boolean isLocalAnalysis) {
-    // Start with the default options, and then add in source
-    // Turn on all warnings as well.
-    List<String> options = Lists.newArrayList(compilationUnit.getArgumentList());
-    // Use Xlint options in the compilation unit, instead of adding Xlint:all,
-    // so that it's possible to turn off lint checks.
-    // options = JavacOptionsUtils.useAllWarnings(options);
-    options = JavacOptionsUtils.ensureEncodingSet(options, DEFAULT_ENCODING);
-    options = JavacOptionsUtils.removeUnsupportedOptions(options);
+  /** @return The file manager for the source files in this compilation */
+  public JavaFileStoreBasedFileManager getFileManager() {
+    return fileManager;
+  }
 
-    if (!isLocalAnalysis) {
-      JavacOptionsUtils.appendJREJarsToClasspath(options);
-    }
+  /** Generate options (such as classpath and sourcepath) from the compilation unit. */
+  private static List<String> optionsFromCompilationUnit(
+      CompilationUnit compilationUnit, List<Processor> processors) {
+    // Start with the default options, and then add in source
+    List<String> arguments = Lists.newArrayList(compilationUnit.getArgumentList());
+    // TODO(jrtom): use static imports for brevity
+    arguments = JavacOptionsUtils.ensureEncodingSet(arguments, DEFAULT_ENCODING);
+    JavacOptionsUtils.updateArgumentsWithJavaOptions(arguments, compilationUnit);
 
     if (processors.isEmpty()) {
-      options.add("-proc:none");
+      arguments.add("-proc:none");
     }
-    return ImmutableList.copyOf(options);
+
+    arguments = JavacOptionsUtils.removeUnsupportedOptions(arguments);
+    return ImmutableList.copyOf(arguments);
   }
 
   /** Writes nothing, used to reduce noise from the javac analysis output. */
@@ -245,6 +225,6 @@ public class JavaCompilationDetails {
     public void close() {}
 
     @Override
-    public void write(char cbuf[], int off, int len) {}
+    public void write(char[] cbuf, int off, int len) {}
   }
 }

@@ -9,8 +9,20 @@ permalink: /getting-started/
 
 ## Get the Kythe source code
 
+Decide where you want to store kythe code, e.g. `~/my/code/dir` (note that
+after we clone from git, it will append 'kythe' as the last directory).
+
 {% highlight bash %}
+cd ~/my/code/dir
 git clone https://github.com/google/kythe.git
+{% endhighlight %}
+
+Also set the env var `KYTHE_DIR=~/my/code/dir/kythe` in your `.bashrc`
+while you're at it.
+
+If you use ssh to authenticate to github:
+{% highlight bash %}
+git clone git@github.com:google/kythe.git
 {% endhighlight %}
 
 ### External Dependencies
@@ -32,7 +44,6 @@ Kythe relies on the following external dependencies:
 * libssl-dev
 * bison-3.0.2 (2.3 is also acceptable)
 * flex-2.5
-* libmemcached-dev
 * [docker](https://www.docker.com/) (for release images `//kythe/release/...` and `//buildtools/docker`)
 * [leiningen](http://leiningen.org/) (used to build `kythe/web/ui`)
 * [ninja](https://ninja-build.org/) (optional; improves LLVM build speed)
@@ -47,10 +58,10 @@ echo deb http://http.debian.net/debian jessie-backports main >> /etc/apt/sources
 apt-get update
 
 apt-get install \
-    asciidoc source-highlight graphviz \
+    asciidoc asciidoctor source-highlight graphviz \
     gcc libssl-dev uuid-dev libncurses-dev libcurl4-openssl-dev flex clang-3.5 bison \
     openjdk-8-jdk \
-    parallel libmemcached-dev
+    parallel
 
 # https://golang.org/dl/ for Golang installation
 # https://docs.docker.com/installation/debian/#debian-jessie-80-64-bit for Docker installation
@@ -74,6 +85,37 @@ to the exact revisions that we test against.
 
 Note that you don't need to have a checkout of LLVM per Kythe checkout.  It's
 enough to have a symlink of the `third_party/llvm/llvm` directory.
+
+#### Troubleshooting bazel/clang/llvm errors
+You must either have /usr/bin/clang aliased properly, or the CLANG env var set:
+
+{% highlight bash %}
+sudo ln -s /usr/bin/clang-3.5 /usr/bin/clang
+sudo ln -s /usr/bin/clang++-3.5 /usr/bin/clang++
+{% endhighlight %}
+
+OR:
+
+{% highlight bash %}
+echo 'export CLANG=/usr/bin/clang' >> ~/.bashrc
+source ~/.bashrc
+{% endhighlight %}
+
+If you ran bazel and get errors like this:
+
+{% highlight bash %}
+/home/username/kythe/third_party/zlib/BUILD:10:1: undeclared inclusion(s) in rule '//third_party/zlib:zlib':
+this rule is missing dependency declarations for the following files included by 'third_party/zlib/uncompr.c':
+  '/usr/lib/llvm-3.5/lib/clang/3.5.0/include/limits.h'
+  '/usr/lib/llvm-3.5/lib/clang/3.5.0/include/stddef.h'
+  '/usr/lib/llvm-3.5/lib/clang/3.5.0/include/stdarg.h'.
+{% endhighlight %}
+
+then you need to clean and rebuild your TOOLCHAIN:
+
+{% highlight bash %}
+bazel clean --expunge && bazel build @local_config_cc//:toolchain
+{% endhighlight %}
 
 ## Building Kythe
 
@@ -143,6 +185,7 @@ language-agnostic services), using the Go tool is very convenient.
 
 Prerequisites:
 {% highlight bash %}
+apt-get install ruby ruby-dev build-essential
 gem install bundler
 {% endhighlight %}
 

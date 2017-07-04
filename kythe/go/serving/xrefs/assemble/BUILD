@@ -21,15 +21,18 @@ go_package_library(
         "//kythe/proto:internal_proto_go",
         "//kythe/proto:serving_proto_go",
         "//kythe/proto:storage_proto_go",
-        "//kythe/proto:xref_proto_go",
         "@go_stringset//:stringset",
     ],
 )
 
 go_test(
     name = "assemble_test",
+    size = "small",
     srcs = ["assemble_test.go"],
     library = "assemble",
     visibility = ["//visibility:private"],
-    deps = ["//kythe/go/test/testutil"],
+    deps = [
+        "//kythe/go/test/testutil",
+        "@go_protobuf//:proto",
+    ],
 )

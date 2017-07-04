@@ -20,7 +20,7 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
 
-/** Common configuration for the Kythe Java indexer. */
+/** Common configuration for Kythe indexers. */
 @Parameters(separators = "=")
 public class IndexerConfig {
   private final String programName;
@@ -33,23 +33,18 @@ public class IndexerConfig {
   private boolean help;
 
   @Parameter(
-    names = "--ignore_vname_paths",
-    description =
-        "Determines whether the analyzer should ignore the path components of the"
-            + " {@link VName}s in each compilation.  This can be used to \"fix\" the coherence"
-            + " of {@link VName}s across compilations when the extractor was not (or could not be)"
-            + " supplied with a proper {@link VName}s configuration file.  Each path will instead be"
-            + " set to the qualified name of each node's enclosing class (e.g. \"java.lang.String\""
-            + " or \"com.google.common.base.Predicate\")."
-  )
-  private boolean ignoreVNamePaths;
-
-  @Parameter(
     names = "--verbose",
     description =
         "Determines whether the analyzer should emit verbose logging messages for debugging."
   )
   private boolean verboseLogging;
+
+  @Parameter(
+    names = "--default_metadata_corpus",
+    description =
+        "If set, use this as the corpus for VNames generated from metadata (if a corpus cannot otherwise be determined)."
+  )
+  private String defaultMetadataCorpus;
 
   public IndexerConfig(String programName) {
     this.programName = programName;
@@ -72,21 +67,21 @@ public class IndexerConfig {
     return help;
   }
 
-  public final boolean getIgnoreVNamePaths() {
-    return ignoreVNamePaths;
-  }
-
   public final boolean getVerboseLogging() {
     return verboseLogging;
   }
 
-  public IndexerConfig setIgnoreVNamePaths(boolean ignoreVNamePaths) {
-    this.ignoreVNamePaths = ignoreVNamePaths;
-    return this;
+  public final String getDefaultMetadataCorpus() {
+    return defaultMetadataCorpus;
   }
 
   public IndexerConfig setVerboseLogging(boolean verboseLogging) {
     this.verboseLogging = verboseLogging;
+    return this;
+  }
+
+  public IndexerConfig setDefaultMetadataCorpus(String defaultMetadataCorpus) {
+    this.defaultMetadataCorpus = defaultMetadataCorpus;
     return this;
   }
 }

@@ -23,12 +23,16 @@ import (
 	"go/token"
 	"go/types"
 	"log"
+	"net/url"
+	"path"
 	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
+	"golang.org/x/tools/go/types/typeutil"
 
 	"kythe.io/kythe/go/extractors/govname"
+	"kythe.io/kythe/go/util/metadata"
 	"kythe.io/kythe/go/util/schema/edges"
 	"kythe.io/kythe/go/util/schema/facts"
 	"kythe.io/kythe/go/util/schema/nodes"
@@ -43,6 +47,16 @@ type EmitOptions struct {
 	// encountered. This is helpful if you want to index a package in isolation
 	// where data for the standard library are not available.
 	EmitStandardLibs bool
+
+	// If true, emit code facts containing MarkedSource messages.
+	EmitMarkedSource bool
+
+	// If true, emit linkages specified by metadata rules.
+	EmitLinkages bool
+
+	// If set, use this as the base URL for links to godoc.  The import path is
+	// appended to the path of this URL to obtain the target URL to link to.
+	DocBase *url.URL
 }
 
 // shouldEmit reports whether the indexer should emit a node for the given
@@ -51,6 +65,20 @@ type EmitOptions struct {
 func (e *EmitOptions) shouldEmit(vname *spb.VName) bool {
 	return e != nil && e.EmitStandardLibs && govname.IsStandardLibrary(vname)
 }
+
+// docURL returns a documentation URL for the specified package, if one is
+// specified by the options, or "" if not.
+func (e *EmitOptions) docURL(pi *PackageInfo) string {
+	if e != nil && e.DocBase != nil {
+		u := *e.DocBase
+		u.Path = path.Join(u.Path, pi.ImportPath)
+		return u.String()
+	}
+	return ""
+}
+
+// An impl records that a type A implements an interface B.
+type impl struct{ A, B types.Object }
 
 // Emit generates Kythe facts and edges to represent pi, and writes them to
 // sink. In case of errors, processing continues as far as possible before the
@@ -61,10 +89,14 @@ func (pi *PackageInfo) Emit(ctx context.Context, sink Sink, opts *EmitOptions) e
 		pi:   pi,
 		sink: sink,
 		opts: opts,
+		impl: make(map[impl]bool),
 	}
 
 	// Emit a node to represent the package as a whole.
 	e.writeFact(pi.VName, facts.NodeKind, nodes.Package)
+	if url := e.opts.docURL(pi); url != "" {
+		e.writeFact(pi.VName, facts.DocURI, url)
+	}
 
 	// Emit facts for all the source files claimed by this package.
 	for file, text := range pi.SourceText {
@@ -98,10 +130,16 @@ func (pi *PackageInfo) Emit(ctx context.Context, sink Sink, opts *EmitOptions) e
 				e.visitAssignStmt(n, stack)
 			case *ast.RangeStmt:
 				e.visitRangeStmt(n, stack)
+			case *ast.CompositeLit:
+				e.visitCompositeLit(n, stack)
 			}
 			return true
 		}), file)
 	}
+
+	// Emit edges from each named type to the interface types it satisfies, for
+	// those interface types that are known to this compiltion.
+	e.emitSatisfactions()
 
 	// TODO(fromberger): Add diagnostics for type-checker errors.
 	for _, err := range pi.Errors {
@@ -115,6 +153,8 @@ type emitter struct {
 	pi       *PackageInfo
 	sink     Sink
 	opts     *EmitOptions
+	impl     map[impl]bool                        // see checkImplements
+	rmap     map[*ast.File]map[int]metadata.Rules // see applyRules
 	firstErr error
 }
 
@@ -140,7 +180,7 @@ func (e *emitter) visitIdent(id *ast.Ident, stack stackFunc) {
 
 // visitFuncDecl handles function and method declarations and their parameters.
 func (e *emitter) visitFuncDecl(decl *ast.FuncDecl, stack stackFunc) {
-	info := new(funcInfo)
+	info := &funcInfo{vname: new(spb.VName)}
 	e.pi.function[decl] = info
 
 	// Get the type of this function, even if its name is blank.
@@ -156,7 +196,7 @@ func (e *emitter) visitFuncDecl(decl *ast.FuncDecl, stack stackFunc) {
 		e.pi.sigs[obj] = fmt.Sprintf("%s#%d", e.pi.Signature(obj), e.pi.numInits)
 	}
 
-	info.vname = e.writeBinding(decl.Name, nodes.Function, nil)
+	info.vname = e.mustWriteBinding(decl.Name, nodes.Function, nil)
 	e.writeDef(decl, info.vname)
 	e.writeDoc(decl.Doc, info.vname)
 
@@ -166,8 +206,9 @@ func (e *emitter) visitFuncDecl(decl *ast.FuncDecl, stack stackFunc) {
 	if sig.Recv() != nil {
 		// The receiver is treated as parameter 0.
 		if names := decl.Recv.List[0].Names; names != nil {
-			recv := e.writeBinding(names[0], nodes.Variable, info.vname)
-			e.writeEdge(info.vname, recv, edges.ParamIndex(0))
+			if recv := e.writeBinding(names[0], nodes.Variable, info.vname); recv != nil {
+				e.writeEdge(info.vname, recv, edges.ParamIndex(0))
+			}
 		}
 
 		// The method should be a child of its (named) enclosing type.
@@ -191,9 +232,10 @@ func (e *emitter) visitFuncLit(flit *ast.FuncLit, stack stackFunc) {
 	fi.numAnons++
 	info := &funcInfo{vname: proto.Clone(fi.vname).(*spb.VName)}
 	info.vname.Language = govname.Language
-	info.vname.Signature += fmt.Sprintf("$%d", fi.numAnons)
+	info.vname.Signature += "$" + strconv.Itoa(fi.numAnons)
 	e.pi.function[flit] = info
 	e.writeDef(flit, info.vname)
+	e.writeFact(info.vname, facts.NodeKind, nodes.Function)
 
 	if sig, ok := e.pi.Info.Types[flit].Type.(*types.Signature); ok {
 		e.emitParameters(flit.Type, sig, info)
@@ -208,11 +250,18 @@ func (e *emitter) visitValueSpec(spec *ast.ValueSpec, stack stackFunc) {
 	}
 	doc := specComment(spec, stack)
 	for _, id := range spec.Names {
-		if e.pi.Info.Defs[id] == nil {
+		target := e.writeBinding(id, kind, e.nameContext(stack))
+		if target == nil {
 			continue // type error (reported elsewhere)
 		}
-		target := e.writeBinding(id, kind, e.nameContext(stack))
 		e.writeDoc(doc, target)
+	}
+
+	// Handle fields of anonymous struct types declared in situ.
+	for _, v := range spec.Values {
+		if lit, ok := v.(*ast.CompositeLit); ok {
+			e.emitAnonFields(lit.Type)
+		}
 	}
 }
 
@@ -223,7 +272,7 @@ func (e *emitter) visitTypeSpec(spec *ast.TypeSpec, stack stackFunc) {
 	if obj == nil {
 		return // type error
 	}
-	target := e.writeBinding(spec.Name, "", e.nameContext(stack))
+	target := e.mustWriteBinding(spec.Name, "", e.nameContext(stack))
 	e.writeDef(spec, target)
 	e.writeDoc(specComment(spec, stack), target)
 
@@ -240,12 +289,32 @@ func (e *emitter) visitTypeSpec(spec *ast.TypeSpec, stack stackFunc) {
 		// Add bindings for the explicitly-named fields in this declaration.
 		// Parent edges were already added, so skip them here.
 		if st, ok := spec.Type.(*ast.StructType); ok {
-			mapFields(st.Fields, func(_ int, id *ast.Ident) {
-				e.writeBinding(id, nodes.Variable, nil)
+			mapFields(st.Fields, func(i int, id *ast.Ident) {
+				target := e.writeVarBinding(id, nodes.Field, nil)
+				e.writeDoc(st.Fields.List[i].Doc, target)
 			})
+
+			// Handle anonymous fields. Such fields behave as if they were
+			// named by the base identifier of their type.
+			for _, field := range st.Fields.List {
+				if len(field.Names) != 0 {
+					continue // already handled above
+				}
+				id, ok := e.pi.findFieldName(field.Type)
+				obj := e.pi.Info.Defs[id]
+				if ok && obj != nil {
+					// Don't write a fresh anchor here; we already wrote one as
+					// part of the ref to the type, and we don't want duplicate
+					// outputs.
+					anchor := e.pi.AnchorVName(e.pi.Span(id))
+					target := e.pi.ObjectVName(obj)
+					e.writeEdge(anchor, target, edges.DefinesBinding)
+					e.writeFact(target, facts.NodeKind, nodes.Variable)
+					e.writeFact(target, facts.Subkind, nodes.Field)
+					e.writeDoc(field.Doc, target)
+				}
+			}
 		}
-		// TODO(fromberger): Add bindings for anonymous fields. This will need
-		// to account for pointers and qualified identifiers.
 
 	case *types.Interface:
 		e.writeFact(target, facts.NodeKind, nodes.Interface)
@@ -255,7 +324,9 @@ func (e *emitter) visitTypeSpec(spec *ast.TypeSpec, stack stackFunc) {
 		}
 		// Mark the interface as an extension of any embedded interfaces.
 		for i, n := 0, t.NumEmbeddeds(); i < n; i++ {
-			e.writeEdge(target, e.pi.ObjectVName(t.Embedded(i).Obj()), edges.Extends)
+			if eobj := t.Embedded(i).Obj(); e.checkImplements(obj, eobj) {
+				e.writeEdge(target, e.pi.ObjectVName(eobj), edges.Extends)
+			}
 		}
 
 		// Add bindings for the explicitly-named methods in this declaration.
@@ -267,8 +338,13 @@ func (e *emitter) visitTypeSpec(spec *ast.TypeSpec, stack stackFunc) {
 		}
 
 	default:
-		e.writeFact(target, facts.NodeKind, nodes.TApp)
-		// TODO(fromberger): Handle pointer types, newtype forms.
+		// We model a newtype form whose underlying type is not already a
+		// struct (e.g., "type Foo int") as if it were a record with a single
+		// unexported field of the underlying type. That is not really what Go
+		// does, but it is close enough for the graph model to work. Since
+		// there is no actual field declaration, however, we don't emit that.
+		e.writeFact(target, facts.NodeKind, nodes.Record)
+		e.writeFact(target, facts.Subkind, nodes.Type)
 	}
 }
 
@@ -306,7 +382,7 @@ func (e *emitter) visitAssignStmt(stmt *ast.AssignStmt, stack stackFunc) {
 		if id, _ := expr.(*ast.Ident); id != nil {
 			// Add a binding only if this is the definition site for the name.
 			if obj := e.pi.Info.Defs[id]; obj != nil && obj.Pos() == id.Pos() {
-				e.writeBinding(id, nodes.Variable, up)
+				e.mustWriteBinding(id, nodes.Variable, up)
 			}
 		}
 	}
@@ -330,6 +406,54 @@ func (e *emitter) visitRangeStmt(stmt *ast.RangeStmt, stack stackFunc) {
 	}
 }
 
+// visitCompositeLit handles references introduced by positional initializers
+// in composite literals that construct (pointer to) struct values. Named
+// initializers are handled separately.
+func (e *emitter) visitCompositeLit(expr *ast.CompositeLit, stack stackFunc) {
+	if len(expr.Elts) == 0 {
+		return // no fields to initialize
+	}
+
+	tv, ok := e.pi.Info.Types[expr]
+	if !ok {
+		log.Printf("WARNING: Unable to determine composite literal type (%s)", e.pi.FileSet.Position(expr.Pos()))
+		return
+	}
+	sv, ok := deref(tv.Type.Underlying()).(*types.Struct)
+	if !ok {
+		return // non-struct type, e.g. a slice; nothing to do here
+	}
+
+	if n := sv.NumFields(); n < len(expr.Elts) {
+		// Embedded struct fields from an imported package may not appear in
+		// the list if the import did not succeed.  To remain robust against
+		// such cases, don't try to read into the fields of a struct type if
+		// the counts don't line up. The information we emit will still be
+		// correct, we'll just miss some initializers.
+		log.Printf("ERROR: Struct has %d fields but %d initializers (skipping)", n, len(expr.Elts))
+		return
+	}
+	for i, elt := range expr.Elts {
+		// The keys for key-value initializers are handled upstream of us, so
+		// we need only handle the values.
+		switch t := elt.(type) {
+		case *ast.KeyValueExpr:
+			e.emitPosRef(t.Value, sv.Field(i), edges.RefInit)
+		default:
+			e.emitPosRef(t, sv.Field(i), edges.RefInit)
+		}
+	}
+}
+
+// emitPosRef emits a zero-width anchor at the start of loc, pointing to obj.
+func (e *emitter) emitPosRef(loc ast.Node, obj types.Object, kind string) {
+	target := e.pi.ObjectVName(obj)
+	file, start, end := e.pi.Span(loc)
+	anchor := e.pi.AnchorVName(file, start, end)
+	e.writeAnchor(anchor, start, end)
+	e.writeEdge(anchor, target, kind)
+}
+
 // emitParameters emits parameter edges for the parameters of a function type,
 // given the type signature and info of the enclosing declaration or function
 // literal.
@@ -344,8 +468,10 @@ func (e *emitter) emitParameters(ftype *ast.FuncType, sig *types.Signature, info
 	// Emit bindings and parameter edges for the parameters.
 	mapFields(ftype.Params, func(i int, id *ast.Ident) {
 		if sig.Params().At(i) != nil {
-			param := e.writeBinding(id, nodes.Variable, info.vname)
-			e.writeEdge(info.vname, param, edges.ParamIndex(paramIndex))
+			if param := e.writeBinding(id, nodes.Variable, info.vname); param != nil {
+				e.writeEdge(info.vname, param, edges.ParamIndex(paramIndex))
+				e.emitAnonFields(ftype.Params.List[i].Type)
+			}
 		}
 		paramIndex++
 	})
@@ -356,10 +482,175 @@ func (e *emitter) emitParameters(ftype *ast.FuncType, sig *types.Signature, info
 	})
 }
 
+// emitAnonFields checks whether expr denotes an anonymous struct type, and if
+// so emits bindings for the fields of that struct. The resulting fields do not
+// parent to the struct, since it has no referential identity; but we do
+// capture documentation in the unlikely event someone wrote any.
+func (e *emitter) emitAnonFields(expr ast.Expr) {
+	if st, ok := expr.(*ast.StructType); ok {
+		mapFields(st.Fields, func(i int, id *ast.Ident) {
+			target := e.writeVarBinding(id, nodes.Field, nil) // no parent
+			e.writeDoc(st.Fields.List[i].Doc, target)
+		})
+	}
+}
+
+// An override represents the relationship that x overrides y.
+type override struct {
+	x, y types.Object
+}
+
+// overrides represents a set of override relationships we've already generated.
+type overrides map[override]bool
+
+// seen reports whether an x overrides y was already cached, and if not adds it
+// to the set.
+func (o overrides) seen(x, y types.Object) bool {
+	ov := override{x: x, y: y}
+	ok := o[ov]
+	if !ok {
+		o[ov] = true
+	}
+	return ok
+}
+
+// emitSatisfactions visits each named type known through the compilation being
+// indexed, and emits edges connecting it to any known interfaces its method
+// set satisfies.
+func (e *emitter) emitSatisfactions() {
+	// Find the names of all defined types mentioned in this compilation.
+	var allNames []*types.TypeName
+
+	// For the current source package, use all names, even local ones.
+	for _, obj := range e.pi.Info.Defs {
+		if obj, ok := obj.(*types.TypeName); ok {
+			if _, ok := obj.Type().(*types.Named); ok {
+				allNames = append(allNames, obj)
+			}
+		}
+	}
+
+	// For dependencies, we only have access to package-level types, not those
+	// defined by inner scopes.
+	for _, pkg := range e.pi.Dependencies {
+		scope := pkg.Scope()
+		for _, name := range scope.Names() {
+			if obj, ok := scope.Lookup(name).(*types.TypeName); ok {
+				if _, ok := obj.Type().(*types.Named); ok {
+					allNames = append(allNames, obj)
+				}
+			}
+		}
+	}
+
+	// Cache the method set of each named type in this package.
+	var msets typeutil.MethodSetCache
+	// Cache the overrides we've noticed to avoid duplicate entries.
+	cache := make(overrides)
+	for _, xobj := range allNames {
+		if xobj.Pkg() != e.pi.Package {
+			continue // not from this package
+		}
+
+		// Check whether x is a named type with methods; if not, skip it.
+		x := xobj.Type()
+		ximset := typeutil.IntuitiveMethodSet(x, &msets)
+		if len(ximset) == 0 {
+			continue // no methods to consider
+		}
+
+		// N.B. This implementation is quadratic in the number of visible
+		// interfaces, but that's probably OK since are only considering a
+		// single compilation.
+
+		xmset := msets.MethodSet(x)
+		for _, yobj := range allNames {
+			if xobj == yobj {
+				continue
+			}
+
+			y := yobj.Type()
+			ymset := msets.MethodSet(y)
+
+			ifx, ify := isInterface(x), isInterface(y)
+			switch {
+			case ifx && ify && ymset.Len() > 0:
+				if types.AssignableTo(x, y) {
+					e.writeSatisfies(xobj, yobj)
+				}
+				if types.AssignableTo(y, x) {
+					e.writeSatisfies(yobj, xobj)
+				}
+
+			case ifx:
+				// y is a concrete type
+				if types.AssignableTo(y, x) {
+					e.writeSatisfies(yobj, xobj)
+				} else if py := types.NewPointer(y); types.AssignableTo(py, x) {
+					e.writeSatisfies(yobj, xobj)
+					// TODO(fromberger): Do we want this case?
+				}
+
+			case ify && ymset.Len() > 0:
+				// x is a concrete type
+				if types.AssignableTo(x, y) {
+					e.writeSatisfies(xobj, yobj)
+				} else if px := types.NewPointer(x); types.AssignableTo(px, y) {
+					e.writeSatisfies(xobj, yobj)
+					// TODO(fromberger): Do we want this case?
+				}
+				e.emitOverrides(xmset, ymset, cache)
+
+			default:
+				// Both x and y are concrete.
+			}
+		}
+	}
+}
+
+// Add xm-(overrides)-ym for each concrete method xm with a corresponding
+// abstract method ym.
+func (e *emitter) emitOverrides(xmset, ymset *types.MethodSet, cache overrides) {
+	for i, n := 0, ymset.Len(); i < n; i++ {
+		ym := ymset.At(i)
+		yobj := ym.Obj()
+		xm := xmset.Lookup(yobj.Pkg(), yobj.Name())
+		if xm == nil {
+			continue // this method is not part of the interface we're probing
+		}
+
+		xobj := xm.Obj()
+		if cache.seen(xobj, yobj) {
+			continue
+		}
+
+		xvname := e.pi.ObjectVName(xobj)
+		yvname := e.pi.ObjectVName(yobj)
+		e.writeEdge(xvname, yvname, edges.Overrides)
+	}
+}
+
+func isInterface(typ types.Type) bool { _, ok := typ.Underlying().(*types.Interface); return ok }
+
 func (e *emitter) check(err error) {
 	if err != nil && e.firstErr == nil {
 		e.firstErr = err
 		log.Printf("ERROR indexing %q: %v", e.pi.ImportPath, err)
+	}
+}
+
+func (e *emitter) checkImplements(src, tgt types.Object) bool {
+	i := impl{A: src, B: tgt}
+	if e.impl[i] {
+		return false
+	}
+	e.impl[i] = true
+	return true
+}
+
+func (e *emitter) writeSatisfies(src, tgt types.Object) {
+	if e.checkImplements(src, tgt) {
+		e.writeEdge(e.pi.ObjectVName(src), e.pi.ObjectVName(tgt), edges.Satisfies)
 	}
 }
 
@@ -378,10 +669,41 @@ func (e *emitter) writeAnchor(src *spb.VName, start, end int) {
 // writeRef emits an anchor spanning origin and referring to target with an
 // edge of the given kind. The vname of the anchor is returned.
 func (e *emitter) writeRef(origin ast.Node, target *spb.VName, kind string) *spb.VName {
-	anchor, start, end := e.pi.Anchor(origin)
+	file, start, end := e.pi.Span(origin)
+	anchor := e.pi.AnchorVName(file, start, end)
 	e.writeAnchor(anchor, start, end)
 	e.writeEdge(anchor, target, kind)
+
+	// Check whether we are intended to emit metadata linkage edges, and if so,
+	// whether there are any to process.
+	e.applyRules(file, start, end, kind, func(rule metadata.Rule) {
+		if rule.Reverse {
+			e.writeEdge(rule.VName, target, rule.EdgeOut)
+		} else {
+			e.writeEdge(target, rule.VName, rule.EdgeOut)
+		}
+	})
+
 	return anchor
+}
+
+// mustWriteBinding is as writeBinding, but panics if id does not resolve.  Use
+// this in cases where the object is known already to exist.
+func (e *emitter) mustWriteBinding(id *ast.Ident, kind string, parent *spb.VName) *spb.VName {
+	if target := e.writeBinding(id, kind, parent); target != nil {
+		return target
+	}
+	panic("unresolved definition") // logged in writeBinding
+}
+
+// writeVarBinding is as writeBinding, assuming the kind is "variable".
+// If subkind != "", it is also emitted as a subkind.
+func (e *emitter) writeVarBinding(id *ast.Ident, subkind string, parent *spb.VName) *spb.VName {
+	vname := e.writeBinding(id, nodes.Variable, parent)
+	if vname != nil && subkind != "" {
+		e.writeFact(vname, facts.Subkind, subkind)
+	}
+	return vname
 }
 
 // writeBinding emits a node of the specified kind for the target of id.  If
@@ -389,7 +711,13 @@ func (e *emitter) writeRef(origin ast.Node, target *spb.VName, kind string) *spb
 // is also emitted at id. If parent != nil, the target is also recorded as its
 // child. The target vname is returned.
 func (e *emitter) writeBinding(id *ast.Ident, kind string, parent *spb.VName) *spb.VName {
-	target := e.pi.ObjectVName(e.pi.Info.Defs[id])
+	obj := e.pi.Info.Defs[id]
+	if obj == nil {
+		loc := e.pi.FileSet.Position(id.Pos())
+		log.Printf("ERROR: Missing definition for id %q at %s", id.Name, loc)
+		return nil
+	}
+	target := e.pi.ObjectVName(obj)
 	if kind != "" {
 		e.writeFact(target, facts.NodeKind, kind)
 	}
@@ -398,6 +726,16 @@ func (e *emitter) writeBinding(id *ast.Ident, kind string, parent *spb.VName) *s
 	}
 	if parent != nil {
 		e.writeEdge(target, parent, edges.ChildOf)
+	}
+	if e.opts != nil && e.opts.EmitMarkedSource {
+		if ms := e.pi.MarkedSource(obj); ms != nil {
+			bits, err := proto.Marshal(ms)
+			if err != nil {
+				log.Printf("ERROR: Unable to marshal marked source: %v", err)
+			} else {
+				e.writeFact(target, facts.Code, string(bits))
+			}
+		}
 	}
 	return target
 }
@@ -477,6 +815,34 @@ func (e *emitter) nameContext(stack stackFunc) *spb.VName {
 	return e.pi.VName
 }
 
+// applyRules calls apply for each metadata rule matching the given combination
+// of location and kind.
+func (e *emitter) applyRules(file *ast.File, start, end int, kind string, apply func(r metadata.Rule)) {
+	if e.opts == nil || !e.opts.EmitLinkages {
+		return // nothing to do
+	} else if e.rmap == nil {
+		e.rmap = make(map[*ast.File]map[int]metadata.Rules)
+	}
+
+	// Lazily populate a cache of file :: start :: rules mappings, so that we
+	// need only scan the rules coincident on the starting point of the range
+	// we care about. In almost all cases that will be just one, if any.
+	rules, ok := e.rmap[file]
+	if !ok {
+		rules = make(map[int]metadata.Rules)
+		for _, rule := range e.pi.Rules[file] {
+			rules[rule.Begin] = append(rules[rule.Begin], rule)
+		}
+		e.rmap[file] = rules
+	}
+
+	for _, rule := range rules[start] {
+		if rule.End == end && rule.EdgeIn == kind {
+			apply(rule)
+		}
+	}
+}
+
 // A visitFunc visits a node of the Go AST. The function can use stack to
 // retrieve AST nodes on the path from the node up to the root.  If the return
 // value is true, the children of node are also visited; otherwise they are
@@ -539,14 +905,18 @@ func mapFields(fields *ast.FieldList, f func(i int, id *ast.Ident)) {
 	}
 }
 
+var escComment = strings.NewReplacer("[", `\[`, "]", `\]`, `\`, `\\`)
+
 // trimComment removes the comment delimiters from a comment.  For single-line
 // comments, it also removes a single leading space, if present; for multi-line
-// comments it discards leading and trailing whitespace.
+// comments it discards leading and trailing whitespace. Brackets and backslash
+// characters are escaped per http://www.kythe.io/docs/schema/#doc.
 func trimComment(text string) string {
 	if single := strings.TrimPrefix(text, "//"); single != text {
-		return strings.TrimPrefix(single, " ")
+		return escComment.Replace(strings.TrimPrefix(single, " "))
 	}
-	return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(text, "/*"), "*/"))
+	trimmed := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(text, "/*"), "*/"))
+	return escComment.Replace(trimmed)
 }
 
 // specComment returns the innermost comment associated with spec, or nil.

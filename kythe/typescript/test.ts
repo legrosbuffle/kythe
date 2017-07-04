@@ -15,33 +15,32 @@
  */
 
 // This program runs the Kythe verifier on test cases in the testdata/
-// directory.  It's written in TypeScript (rather than a plain shell)
+// directory.  It's written in TypeScript (rather than a plain shell
 // script) so it can reuse TypeScript data structures across test cases,
 // speeding up the test.
+//
+// If run with no arguments, runs all tests found in testdata/.
+// Otherwise run any files through the verifier by passing them:
+//   node test.js path/to/test1.ts testdata/test2.ts
 
+import * as assert from 'assert';
 import * as child_process from 'child_process';
-import * as fs from 'fs';
+import * as path from 'path';
 import * as ts from 'typescript';
 
 import * as indexer from './indexer';
 
 const KYTHE_PATH = '/opt/kythe';
 
-let tsOptions: ts.CompilerOptions = {
-  // Disable searching for @types typings.  This prevents TS from looking around
-  // for a node_modules directory.
-  types: [],
-};
-
 /**
  * createTestCompilerHost creates a ts.CompilerHost that caches its default
  * library.  This prevents re-parsing the (big) TypeScript standard library
  * across each test.
  */
-function createTestCompilerHost(): ts.CompilerHost {
-  let compilerHost = ts.createCompilerHost(tsOptions);
+function createTestCompilerHost(options: ts.CompilerOptions): ts.CompilerHost {
+  let compilerHost = ts.createCompilerHost(options);
 
-  let libPath = compilerHost.getDefaultLibFileName(tsOptions);
+  let libPath = compilerHost.getDefaultLibFileName(options);
   let libSource = compilerHost.getSourceFile(libPath, ts.ScriptTarget.ES2015);
 
   let hostGetSourceFile = compilerHost.getSourceFile;
@@ -59,8 +58,10 @@ function createTestCompilerHost(): ts.CompilerHost {
  * Kythe verifier.  It returns a Promise because the node subprocess API must
  * be run async; if there's an error, it will reject the promise.
  */
-function verify(host: ts.CompilerHost, test: string): Promise<void> {
-  let program = ts.createProgram([test], tsOptions, host);
+function verify(
+    host: ts.CompilerHost, options: ts.CompilerOptions,
+    test: string): Promise<void> {
+  let program = ts.createProgram([test], options, host);
 
   let verifier = child_process.spawn(
       `${KYTHE_PATH}/tools/entrystream --read_json |` +
@@ -70,7 +71,7 @@ function verify(host: ts.CompilerHost, test: string): Promise<void> {
         shell: true,
       });
 
-  indexer.index(test, program, (obj: any) => {
+  indexer.index('testcorpus', [test], program, (obj: {}) => {
     verifier.stdin.write(JSON.stringify(obj) + '\n');
   });
   verifier.stdin.end();
@@ -86,19 +87,28 @@ function verify(host: ts.CompilerHost, test: string): Promise<void> {
   });
 }
 
-async function testMain() {
-  // chdir into the testdata directory so that the compiler doesn't see the
-  // node_modules contained in this project.
-  process.chdir('testdata');
+function testLoadTsConfig() {
+  let config = indexer.loadTsConfig('testdata/tsconfig-files.json', 'testdata');
+  // We expect the paths that were loaded to be absolute.
+  assert.deepEqual(config.fileNames, [path.resolve('testdata/alt.ts')]);
+}
 
-  let host = createTestCompilerHost();
-  for (const test of fs.readdirSync('.')) {
-    if (!test.match(/\.ts$/)) continue;
+async function testIndexer(args: string[]) {
+  let config = indexer.loadTsConfig('testdata/tsconfig.json', 'testdata');
+  let testPaths = args.map(path.resolve);
+  if (args.length === 0) {
+    // If no tests were passed on the command line, run all the .ts files found
+    // by the tsconfig.json, which covers all the tests in testdata/.
+    testPaths = config.fileNames;
+  }
 
+  let host = createTestCompilerHost(config.options);
+  for (const test of testPaths) {
+    const testName = path.relative(config.options.rootDir!, test);
     let start = new Date().valueOf();
-    process.stdout.write(`${test}: `);
+    process.stdout.write(`${testName}: `);
     try {
-      await verify(host, test);
+      await verify(host, config.options, test);
     } catch (e) {
       console.log('FAIL');
       throw e;
@@ -109,9 +119,16 @@ async function testMain() {
   return 0;
 }
 
-testMain()
-    .then(() => process.exit(0))
+async function testMain(args: string[]) {
+  testLoadTsConfig();
+  await testIndexer(args);
+}
+
+testMain(process.argv.slice(2))
+    .then(() => {
+      process.exitCode = 0;
+    })
     .catch((e) => {
       console.error(e);
-      process.exit(1);
+      process.exitCode = 1;
     });

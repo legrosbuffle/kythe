@@ -17,6 +17,7 @@
 #ifndef KYTHE_CXX_DOC_HTML_RENDERER_H_
 #define KYTHE_CXX_DOC_HTML_RENDERER_H_
 
+#include "kythe/cxx/common/kythe_uri.h"
 #include "kythe/cxx/doc/markup_handler.h"
 #include "kythe/proto/common.pb.h"
 #include "kythe/proto/xref.pb.h"
@@ -33,6 +34,23 @@ struct HtmlRendererOptions {
   /// will be replaced by &amp;).
   std::function<std::string(const proto::Anchor&)> make_link_uri =
       [](const proto::Anchor&) { return ""; };
+  /// Used to format a location from an `Anchor`. HtmlRenderer will HTML-escape
+  /// the resulting text.
+  std::function<std::string(const proto::Anchor&)> format_location =
+      [](const proto::Anchor& anchor) {
+        auto uri = URI::FromString(anchor.ticket());
+        return uri.first ? std::string(uri.second.v_name().path()) : "";
+      };
+  /// Used to determine the href attribute value for a link pointing to an
+  /// `Anchor`. HtmlRenderer will HTML-escape the link (e.g., ampersands
+  /// will be replaced by &amp;). semantic_ticket is the ticket associated with
+  /// the `Anchor`. If this returns the empty string, the renderer will try
+  /// `make_link_uri`.
+  std::function<std::string(const proto::Anchor&, const std::string&)>
+      make_semantic_link_uri =
+          [](const proto::Anchor&, const std::string& semantic_ticket) {
+            return "";
+          };
   /// Used to retrieve `NodeInfo` for the given semantic ticket.
   virtual const proto::common::NodeInfo* node_info(const std::string&) const {
     return nullptr;
@@ -61,6 +79,15 @@ struct HtmlRendererOptions {
   std::string name_span = "kythe-doc-name-span";
   /// Configures the CSS class to apply to signature detail divs.
   std::string sig_detail_div = "kythe-doc-qualified-name";
+  /// Configures the CSS class to apply to initializer section divs.
+  std::string initializer_div =
+      "kythe-doc-initializer-section kythe-doc-qualified-name";
+  /// Configures the CSS class to apply to multiline initializer pres.
+  std::string initializer_multiline_pre =
+      "kythe-doc-initializer kythe-doc-pre-code "
+      "kythe-doc-initializer-multiline";
+  /// Configures the CSS class to apply to initializer pres.
+  std::string initializer_pre = "kythe-doc-initializer kythe-doc-pre-code";
 };
 
 class DocumentHtmlRendererOptions : public HtmlRendererOptions {
@@ -86,18 +113,28 @@ std::string RenderDocument(const HtmlRendererOptions& options,
                            const proto::DocumentationReply::Document& document);
 
 /// \brief Extract and render the simple identifiers for parameters in `sig`.
-std::vector<std::string> RenderSimpleParams(const proto::MarkedSource& sig);
+std::vector<std::string> RenderSimpleParams(
+    const proto::common::MarkedSource& sig);
 
 /// \brief Extract and render the simple identifier for `sig`.
 /// \return The empty string if there is no such identifier.
-std::string RenderSimpleIdentifier(const proto::MarkedSource& sig);
+std::string RenderSimpleIdentifier(const proto::common::MarkedSource& sig);
 
 /// \brief Extract and render the simple qualified name for `sig`.
 /// \param include_identifier if set, include the identifier on the qualified
 /// name.
 /// \return The empty string if there is no such identifier.
-std::string RenderSimpleQualifiedName(const proto::MarkedSource& sig,
+std::string RenderSimpleQualifiedName(const proto::common::MarkedSource& sig,
                                       bool include_identifier);
+
+/// \brief Extract and render a plaintext initializer for `sig`.
+/// \return The empty string if there is no such initializer.
+std::string RenderInitializer(const proto::common::MarkedSource& sig);
+
+/// \brief Render `sig` as a full signature.
+std::string RenderSignature(const HtmlRendererOptions& options,
+                            const proto::common::MarkedSource& sig,
+                            bool linkify);
 
 }  // namespace kythe
 

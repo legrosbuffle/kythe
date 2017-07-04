@@ -17,20 +17,23 @@
 package com.google.devtools.kythe.analyzers.base;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
+import com.google.devtools.kythe.common.FormattingLogger;
 import com.google.devtools.kythe.platform.shared.StatisticsCollector;
 import com.google.devtools.kythe.proto.Analysis.CompilationUnit.FileInput;
+import com.google.devtools.kythe.proto.Diagnostic;
 import com.google.devtools.kythe.proto.MarkedSource;
+import com.google.devtools.kythe.proto.MarkedSource.Kind;
 import com.google.devtools.kythe.proto.Storage.VName;
 import com.google.devtools.kythe.util.KytheURI;
 import com.google.devtools.kythe.util.Span;
 import java.nio.charset.Charset;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import javax.annotation.Nullable;
 
 /**
  * Factory for Kythe-compliant node and edge {@link EntrySet}s. In general, this class provides two
@@ -43,6 +46,8 @@ import java.util.Map;
  * <p>This class is meant to be subclassed to build indexer-specific nodes and edges.
  */
 public class KytheEntrySets {
+  private static final FormattingLogger logger = FormattingLogger.getLogger(KytheEntrySets.class);
+
   public static final String NODE_PREFIX = "/kythe/";
 
   private final Map<String, EntrySet> nameNodes = new HashMap<>();
@@ -64,7 +69,7 @@ public class KytheEntrySets {
     this.language = compilationVName.getLanguage();
     this.compilationVName = compilationVName;
 
-    ImmutableMap.Builder<String, VName> inputVNames = ImmutableMap.builder();
+    inputVNames = new HashMap<>();
     for (FileInput input : requiredInputs) {
       String digest = input.getInfo().getDigest();
       VName.Builder name = input.getVName().toBuilder();
@@ -74,9 +79,14 @@ public class KytheEntrySets {
         // Ensure file VName has digest signature
         name = name.setSignature(digest);
       }
+      if (inputVNames.containsKey(digest)) {
+        statistics.incrementCounter("file-digest-collision");
+        logger.warningfmt(
+            "Found two files with the same digest [%s]: %s and %s",
+            digest, name, inputVNames.get(digest));
+      }
       inputVNames.put(digest, name.build());
     }
-    this.inputVNames = inputVNames.build();
   }
 
   /** Returns the {@link FactEmitter} used to emit generated {@link EntrySet}s. */
@@ -97,7 +107,7 @@ public class KytheEntrySets {
   @Deprecated
   public NodeBuilder newNode(String kind) {
     getStatisticsCollector().incrementCounter("deprecated-new-node-" + kind);
-    return new NodeBuilder(kind, null, language);
+    return new NodeBuilder(kind, Optional.empty(), language);
   }
 
   /** Returns a new {@link NodeBuilder} with the given node kind set. */
@@ -107,31 +117,36 @@ public class KytheEntrySets {
   }
 
   /** Returns (and emits) a new builtin node. */
-  public EntrySet getBuiltin(String name) {
-    EntrySet node =
-        emitAndReturn(
-            newNode(NodeKind.TBUILTIN)
-                .setSignature(name + "#builtin")
-                .setProperty(
-                    "code",
-                    MarkedSource.newBuilder()
-                        .setPreText(name)
-                        .setKind(MarkedSource.Kind.IDENTIFIER)
-                        .build()));
-    emitName(node, name);
-    return node;
+  public EntrySet newBuiltinAndEmit(String name) {
+    return newBuiltinAndEmit(name, Optional.empty());
   }
 
-  /** Returns (and emits) a new anchor node at the given location in the file. */
-  public EntrySet getAnchor(VName fileVName, Span loc) {
-    return getAnchor(fileVName, loc, null);
+  /** Returns (and emits) a new builtin node. */
+  public EntrySet newBuiltinAndEmit(String name, Optional<String> docUri) {
+    EntrySet.Builder nodeBuilder =
+        newNode(NodeKind.TBUILTIN)
+            .setSignature(getBuiltinSignature(name))
+            .setProperty(
+                "code",
+                MarkedSource.newBuilder().setPreText(name).setKind(Kind.IDENTIFIER).build());
+    if (docUri.isPresent()) {
+      setDocumentUriProperty(nodeBuilder, docUri.get());
+    }
+    return emitAndReturn(nodeBuilder);
   }
 
+  /** Returns a VName for the builtin node corresponding to the specified name. */
+  public VName getBuiltinVName(String name) {
+    return VName.newBuilder()
+        .setSignature(getBuiltinSignature(name))
+        .setLanguage(this.language)
+        .build();
+  }
   /**
    * Returns (and emits) a new anchor node at the given location in the file with an optional
    * snippet span.
    */
-  public EntrySet getAnchor(VName fileVName, Span loc, Span snippet) {
+  public EntrySet newAnchorAndEmit(VName fileVName, Span loc, Span snippet) {
     if (loc == null || !loc.valid()) {
       // TODO(schroederc): reduce number of invalid anchors
       return null;
@@ -152,13 +167,39 @@ public class KytheEntrySets {
   }
 
   /** Returns and emits a NAME node. NAME nodes are cached so that they are only emitted once. */
-  public EntrySet getName(String name) {
+    public EntrySet getNameAndEmit(String name) {
     EntrySet node = nameNodes.get(name);
     if (node == null) {
       node = emitAndReturn(newNode(NodeKind.NAME).setSignature(name));
       nameNodes.put(name, node);
     }
     return node;
+  }
+
+  /** Emits and returns a DIAGNOSTIC node attached for the given file. */
+  public EntrySet emitDiagnostic(VName fileVName, Diagnostic d) {
+    NodeBuilder builder =
+        newNode(NodeKind.DIAGNOSTIC)
+            .addSignatureSalt(d.getMessage())
+            .addSignatureSalt(d.getDetails())
+            .addSignatureSalt(d.getContextUrl())
+            .setProperty("/kythe/message", d.getMessage());
+    if (!d.getDetails().isEmpty()) {
+      builder.setProperty("/kythe/details", d.getDetails());
+    }
+    if (!d.getContextUrl().isEmpty()) {
+      builder.setProperty("/kythe/context/url", d.getContextUrl());
+    }
+    EntrySet dn = emitAndReturn(builder);
+    if (d.hasSpan()) {
+      Span s =
+          new Span(d.getSpan().getStart().getByteOffset(), d.getSpan().getEnd().getByteOffset());
+      EntrySet anchor = newAnchorAndEmit(fileVName, s, null);
+      emitEdge(anchor, EdgeKind.TAGGED, dn);
+    } else {
+      emitEdge(fileVName, EdgeKind.TAGGED, dn.getVName());
+    }
+    return dn;
   }
 
   /**
@@ -175,25 +216,19 @@ public class KytheEntrySets {
   }
 
   /** Emits and returns a new {@link EntrySet} representing a file digest. */
-  public EntrySet getFileNode(String digest, byte[] contents, Charset encoding) {
+  public EntrySet newFileNodeAndEmit(String digest, byte[] contents, Charset encoding) {
     VName name = getFileVName(digest);
-    return getFileNode(name, contents, encoding);
+    return newFileNodeAndEmit(name, contents, encoding);
   }
 
   /** Emits and returns a new {@link EntrySet} representing a file {@link VName}. */
-  public EntrySet getFileNode(VName name, byte[] contents, Charset encoding) {
-    EntrySet node =
-        emitAndReturn(
-            new NodeBuilder(NodeKind.FILE, name)
-                .setProperty("text", contents)
-                .setProperty("text/encoding", encoding.name()));
-    Path fileName = Paths.get(name.getPath()).getFileName();
-    if (fileName != null) {
-      emitName(node, fileName.toString());
-    }
-    return node;
+  public EntrySet newFileNodeAndEmit(VName name, byte[] contents, Charset encoding) {
+    return emitAndReturn(
+        new NodeBuilder(NodeKind.FILE, name)
+            .setProperty("text", contents)
+            .setProperty("text/encoding", encoding.name()));
   }
-
+  
   /**
    * Returns a {@link NodeBuilder} with the given kind and added signature salts for each {@link
    * EntrySet} dependency.
@@ -204,11 +239,6 @@ public class KytheEntrySets {
       builder.addSignatureSalt(e.getVName());
     }
     return builder;
-  }
-
-  /** Emits a NAME node and its associated edge to the given {@code node}. */
-  public void emitName(EntrySet node, String name) {
-    emitEdge(node, EdgeKind.NAMED, getName(name));
   }
 
   /** Emits an edge of the given kind from {@code source} to {@code target}. */
@@ -257,22 +287,33 @@ public class KytheEntrySets {
   }
 
   /** Returns (and emits) a new abstract node over child. */
-  public EntrySet newAbstract(EntrySet child, List<EntrySet> params) {
-    EntrySet abs = emitAndReturn(newNode(NodeKind.ABS).addSignatureSalt(child.getVName()));
+  public EntrySet newAbstractAndEmit(
+      EntrySet child, List<EntrySet> params, @Nullable MarkedSource markedSource) {
+    NodeBuilder absBuilder = newNode(NodeKind.ABS).addSignatureSalt(child.getVName());
+    if (markedSource != null) {
+      absBuilder.setProperty("code", markedSource);
+    }
+
+    EntrySet abs = emitAndReturn(absBuilder);
     emitEdge(child, EdgeKind.CHILDOF, abs);
     emitOrdinalEdges(abs, EdgeKind.PARAM, params);
     return abs;
   }
 
+  /** Returns (and emits) a new abstract node over child. */
+  public EntrySet newAbstractAndEmit(EntrySet child) {
+    return newAbstractAndEmit(child, Collections.emptyList(), null);
+  }
+
   /** Returns and emits a new {@link NodeKind#TAPPLY} function type node. */
-  public EntrySet newFunctionType(EntrySet returnType, List<EntrySet> arguments) {
+  public EntrySet newFunctionTypeAndEmit(EntrySet returnType, List<EntrySet> arguments) {
     List<EntrySet> tArgs = new LinkedList<>(arguments);
     tArgs.add(0, returnType);
-    return newTApply(getBuiltin("fn"), tArgs);
+    return newTApplyAndEmit(newBuiltinAndEmit("fn"), tArgs);
   }
 
   /** Returns and emits a new {@link NodeKind#TAPPLY} node along with its parameter edges. */
-  public EntrySet newTApply(EntrySet head, List<EntrySet> arguments) {
+  public EntrySet newTApplyAndEmit(EntrySet head, List<EntrySet> arguments) {
     EntrySet node = emitAndReturn(newApplyNode(NodeKind.TAPPLY, head, arguments));
     emitEdge(node, EdgeKind.PARAM, head, 0);
     emitOrdinalEdges(node, EdgeKind.PARAM, arguments, 1);
@@ -285,11 +326,6 @@ public class KytheEntrySets {
    */
   private NodeBuilder newApplyNode(NodeKind kind, EntrySet head, Iterable<EntrySet> dependencies) {
     return newNode(kind, dependencies).addSignatureSalt(head.getVName());
-  }
-
-  private NodeBuilder newNode(NodeKind kind, VName name) {
-    getStatisticsCollector().incrementCounter("new-node-" + kind);
-    return new NodeBuilder(kind, name);
   }
 
   /**
@@ -310,6 +346,17 @@ public class KytheEntrySets {
     return set;
   }
 
+  /** Gets a builtin signature for the specified name. */
+  protected static String getBuiltinSignature(String name) {
+    return String.format("%s#builtin", name);
+  }
+
+  /** Sets the document URI property for the specified node builder. */
+  protected static EntrySet.Builder setDocumentUriProperty(
+      EntrySet.Builder builder, String docUri) {
+    return builder.setProperty("doc/uri", docUri);
+  }
+
   /** {@link EntrySet.Builder} for Kythe nodes. */
   public static class NodeBuilder extends EntrySet.Builder {
     private static final String NODE_KIND_LABEL = "node/kind";
@@ -324,16 +371,16 @@ public class KytheEntrySets {
       setupNode(kind.getKind(), kind.getSubkind());
     }
 
-    private NodeBuilder(String kind, String subkind, String language) {
+    private NodeBuilder(String kind, Optional<String> subkind, String language) {
       super(VName.newBuilder().setLanguage(language));
       setupNode(kind, subkind);
     }
 
-    private void setupNode(String kind, String subkind) {
+    private void setupNode(String kind, Optional<String> subkind) {
       setPropertyPrefix(NODE_PREFIX);
       setProperty(NODE_KIND_LABEL, kind);
-      if (subkind != null) {
-        setProperty(NODE_SUBKIND_LABEL, subkind);
+      if (subkind.isPresent()) {
+        setProperty(NODE_SUBKIND_LABEL, subkind.get());
       }
     }
 

@@ -19,11 +19,13 @@ go_package_library(
         "@go_protobuf//:proto",
         "@go_snappy//:snappy",
         "@go_stringset//:stringset",
+        "@go_x_net//:trace",
     ],
 )
 
 go_test(
     name = "xrefs_test",
+    size = "small",
     srcs = ["xrefs_test.go"],
     library = "xrefs",
     visibility = ["//visibility:private"],

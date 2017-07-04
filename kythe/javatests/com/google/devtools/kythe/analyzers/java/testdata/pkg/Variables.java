@@ -15,8 +15,13 @@ public class Variables {
   //- V typed Str = vname(_,"jdk","","","java")
   //- Str.node/kind record
   //- Str.subkind class
-  //- Str named vname("java.lang.String","","","","java")
   String field;
+
+  //- @staticField defines/binding SF
+  //- SF.node/kind variable
+  //- SF.subkind field
+  //- SF childof Class
+  static int staticField;
 
   //- @m defines/binding F
   //- @p1 defines/binding P1
@@ -27,17 +32,21 @@ public class Variables {
   //- F param.1 P2
   //- P1 typed Str
   //- P2 typed Int
+  //- P1 childof F
+  //- P2 childof F
   void m(String p1, int p2) throws IOException {
 
     //- @local defines/binding L
     //- L.node/kind variable
     //- L.subkind local
     //- L typed Int
+    //- L childof F
     int local = 0;
 
     //- @stream defines/binding ResourceVar
     //- ResourceVar.node/kind variable
     //- ResourceVar.subkind local/resource
+    //- ResourceVar childof F
     try (OutputStream stream = System.out) {
       //- @stream ref ResourceVar
       stream.write('\n');
@@ -45,9 +54,18 @@ public class Variables {
       //- @ioe defines/binding ExceptionParam
       //- ExceptionParam.node/kind variable
       //- ExceptionParam.subkind local/exception
+      //- ExceptionParam childof F
     } catch (IOException ioe) {
       //- @ioe ref ExceptionParam
       throw ioe;
     }
+  }
+
+  static {
+    //- @localInStaticInitializer defines/binding StaticLocalVar
+    //- StaticLocalVar.node/kind variable
+    //- StaticLocalVar.subkind local
+    //- StaticLocalVar childof Class
+    int localInStaticInitializer = 0;
   }
 }

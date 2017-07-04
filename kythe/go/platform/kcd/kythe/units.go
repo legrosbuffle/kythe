@@ -19,13 +19,17 @@ package kythe
 
 import (
 	"encoding/json"
-
-	"kythe.io/kythe/go/platform/kcd"
-
-	apb "kythe.io/kythe/proto/analysis_proto"
-	spb "kythe.io/kythe/proto/storage_proto"
+	"sort"
+	"strings"
 
 	"github.com/golang/protobuf/proto"
+
+	"kythe.io/kythe/go/platform/kcd"
+	"kythe.io/kythe/go/util/ptypes"
+
+	apb "kythe.io/kythe/proto/analysis_proto"
+	bipb "kythe.io/kythe/proto/buildinfo_proto"
+	spb "kythe.io/kythe/proto/storage_proto"
 )
 
 // Format is the format key used to denote Kythe compilations, stored
@@ -58,7 +62,25 @@ func (u Unit) Index() kcd.Index {
 			idx.Inputs = append(idx.Inputs, info.Digest)
 		}
 	}
+	for _, detail := range u.Proto.Details {
+		var info bipb.BuildDetails
+		if err := ptypes.UnmarshalAny(detail, &info); err == nil {
+			idx.Target = info.BuildTarget
+		}
+	}
 	return idx
+}
+
+// Canonicalize satisfies part of the kcd.Unit interface.  It orders required
+// inputs by the digest of their contents, orders environment variables and
+// source paths by name, and orders compilation details by their type URL.
+func (u Unit) Canonicalize() {
+	pb := u.Proto
+
+	pb.RequiredInput = sortAndDedup(pb.RequiredInput)
+	sort.Sort(byName(pb.Environment))
+	sort.Strings(pb.SourceFile)
+	ptypes.SortByTypeURL(pb.Details)
 }
 
 // ConvertUnit reports whether v can be converted to a Kythe kcd.Unit, and if
@@ -68,4 +90,49 @@ func ConvertUnit(v interface{}) (kcd.Unit, bool) {
 		return Unit{u}, true
 	}
 	return nil, false
+}
+
+type byDigest []*apb.CompilationUnit_FileInput
+
+func (b byDigest) Len() int           { return len(b) }
+func (b byDigest) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
+func (b byDigest) Less(i, j int) bool { return compareInputs(b[i], b[j]) < 0 }
+
+func compareInputs(a, b *apb.CompilationUnit_FileInput) int {
+	if n := strings.Compare(a.Info.GetDigest(), b.Info.GetDigest()); n != 0 {
+		return n
+	}
+	return strings.Compare(a.Info.GetPath(), b.Info.GetPath())
+}
+
+type byName []*apb.CompilationUnit_Env
+
+func (b byName) Len() int           { return len(b) }
+func (b byName) Less(i, j int) bool { return b[i].Name < b[j].Name }
+func (b byName) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
+
+func sortAndDedup(ri []*apb.CompilationUnit_FileInput) []*apb.CompilationUnit_FileInput {
+	if len(ri) == 0 {
+		return nil
+	}
+	sort.Sort(byDigest(ri))
+
+	// Invariant: All elements at or before i are unique (no duplicates).
+	i, j := 0, 1
+	for j < len(ri) {
+		// If ri[j] ≠ ri[i], it is a new element, not a duplicate.  Move it
+		// next in sequence after i and advance i; this ensures we keep the
+		// first occurrence among duplicates.
+		//
+		// Otherwise, ri[k] == ri[i] for i <= k <= j, i.e., we are scanning a
+		// run of duplicates, and should leave i where it is.
+		if compareInputs(ri[i], ri[j]) != 0 {
+			i++
+			if i != j {
+				ri[i], ri[j] = ri[j], ri[i]
+			}
+		}
+		j++
+	}
+	return ri[:i+1]
 }

@@ -27,7 +27,7 @@
 
 DEFINE_bool(reformat_marked_source, false,
             "Reformat source code used in MarkedSource (experimental).");
-DEFINE_bool(pretty_print_function_prototypes, true,
+DEFINE_bool(pretty_print_function_prototypes, false,
             "Synthesize new function prototypes (experimental).");
 
 namespace kythe {
@@ -162,10 +162,9 @@ class NodeStack {
         AppendToTop(formatted_range, cancel_count, cursor, next_begin, false);
         cursor = next_begin;
       }
-      nodes_.push(Node{&next,
-                       annotation == 1
-                           ? dest_source
-                           : nodes_.top().marked_source->add_child()});
+      nodes_.push(Node{&next, annotation == 1
+                                  ? dest_source
+                                  : nodes_.top().marked_source->add_child()});
       auto *child = nodes_.top().marked_source;
       switch (next.kind) {
         case Annotation::TokenText:
@@ -278,12 +277,12 @@ clang::SourceRange GetReturnTypeSourceRangeForFunctionPointerReturningFunction(
   }
   return {};
 }
-bool SameFileRangesOverlap(const clang::SourceRange &outer,
-                           const clang::SourceRange &inner) {
+bool SameFileRangesOverlapOpenInterval(const clang::SourceRange &outer,
+                                       const clang::SourceRange &inner) {
   return outer.isValid() && inner.isValid() &&
          outer.getBegin().getRawEncoding() <=
              inner.getBegin().getRawEncoding() &&
-         outer.getEnd().getRawEncoding() >= inner.getBegin().getRawEncoding();
+         outer.getEnd().getRawEncoding() > inner.getBegin().getRawEncoding();
 }
 /// \brief Walks the AST to annotate source text.
 ///
@@ -314,22 +313,39 @@ class DeclAnnotator : public clang::DeclVisitor<DeclAnnotator> {
   }
   void VisitVarDecl(clang::VarDecl *decl) {
     if (const auto *type_source_info = decl->getTypeSourceInfo()) {
-      InsertAnnotation(ExpandRangeBySingleToken(
-                           cache_->source_manager(), cache_->lang_options(),
-                           type_source_info->getTypeLoc().getSourceRange()),
-                       Annotation{Annotation::Type});
+      if (!ShouldSkipDecl(decl, type_source_info->getType(),
+                          type_source_info->getTypeLoc().getSourceRange())) {
+        InsertAnnotation(ExpandRangeBySingleToken(
+                             cache_->source_manager(), cache_->lang_options(),
+                             type_source_info->getTypeLoc().getSourceRange()),
+                         Annotation{Annotation::Type});
+      }
+    }
+  }
+  void VisitFieldDecl(clang::FieldDecl *decl) {
+    if (const auto *type_source_info = decl->getTypeSourceInfo()) {
+      if (!ShouldSkipDecl(decl, type_source_info->getType(),
+                          type_source_info->getTypeLoc().getSourceRange())) {
+        InsertAnnotation(ExpandRangeBySingleToken(
+                             cache_->source_manager(), cache_->lang_options(),
+                             type_source_info->getTypeLoc().getSourceRange()),
+                         Annotation{Annotation::Type});
+      }
     }
   }
   void VisitFunctionDecl(clang::FunctionDecl *decl) {
     clang::SourceRange arg_list;
     if (const auto *type_info = decl->getTypeSourceInfo()) {
-      if (auto function_type = type_info->getTypeLoc()
-                                   .IgnoreParens()
-                                   .getAs<clang::FunctionTypeLoc>()) {
-        arg_list = ExpandRangeBySingleToken(cache_->source_manager(),
-                                            cache_->lang_options(),
-                                            function_type.getParensRange());
-        InsertAnnotation(arg_list, Annotation{Annotation::ArgListWithParens});
+      if (!ShouldSkipDecl(decl, type_info->getType(),
+                          type_info->getTypeLoc().getSourceRange())) {
+        if (auto function_type = type_info->getTypeLoc()
+                                     .IgnoreParens()
+                                     .getAs<clang::FunctionTypeLoc>()) {
+          arg_list = ExpandRangeBySingleToken(cache_->source_manager(),
+                                              cache_->lang_options(),
+                                              function_type.getParensRange());
+          InsertAnnotation(arg_list, Annotation{Annotation::ArgListWithParens});
+        }
       }
     }
     auto type_range = decl->getReturnTypeSourceRange();
@@ -337,7 +353,8 @@ class DeclAnnotator : public clang::DeclVisitor<DeclAnnotator> {
       type_range =
           GetReturnTypeSourceRangeForFunctionPointerReturningFunction(decl);
     }
-    if (type_range.isValid()) {
+    if (!ShouldSkipDecl(decl, decl->getReturnType(), type_range) &&
+        type_range.isValid()) {
       auto type_lhs = ExpandRangeBySingleToken(
           cache_->source_manager(), cache_->lang_options(), type_range);
       clang::SourceRange type_rhs = type_lhs;
@@ -354,12 +371,12 @@ class DeclAnnotator : public clang::DeclVisitor<DeclAnnotator> {
       // which will yield `float (* const &)(int b)`.
       // It appears that we'll need to parse the text manually looking for
       // the closing paren to determine where type_rhs should begin.
-      if (SameFileRangesOverlap(type_lhs, name_range_)) {
+      if (SameFileRangesOverlapOpenInterval(type_lhs, name_range_)) {
         type_rhs = clang::SourceRange(name_range_.getEnd(), type_lhs.getEnd());
         type_lhs =
             clang::SourceRange(type_lhs.getBegin(), name_range_.getBegin());
       }
-      if (SameFileRangesOverlap(type_rhs, arg_list)) {
+      if (SameFileRangesOverlapOpenInterval(type_rhs, arg_list)) {
         if (type_lhs == type_rhs) {
           type_lhs =
               clang::SourceRange(type_lhs.getBegin(), arg_list.getBegin());
@@ -372,6 +389,26 @@ class DeclAnnotator : public clang::DeclVisitor<DeclAnnotator> {
       InsertAnnotation(type_lhs, Annotation{Annotation::Type});
     }
   }
+
+  void VisitObjCMethodDecl(clang::ObjCMethodDecl *decl) {
+    // TODO(salguarneri) Do something sensible for selectors and arguments.
+    // Selectors are effectively the name of the method, but the selectors are
+    // interrupted in source code by parameters, so we don't have a single range
+    // for the method name or the method parameters. For example:
+    // -(void) myFunc:(int)size withTimeout:(int)time. The "name" should be
+    // myFunc:withTimeout and the arguments should be something like
+    // "(int)size, (int)time".
+    auto ret_type_range = ExpandRangeBySingleToken(
+        cache_->source_manager(), cache_->lang_options(),
+        decl->getReturnTypeSourceRange());
+    if (ret_type_range.isValid()) {
+      InsertAnnotation(ret_type_range, Annotation{Annotation::Type});
+    } else {
+      LOG(WARNING) << "Invalid return type range for "
+                   << decl->getNameAsString();
+    }
+  }
+
   void Annotate(const clang::NamedDecl *named_decl) {
     Visit(const_cast<clang::NamedDecl *>(named_decl));
     CompleteMarkedSource();
@@ -427,8 +464,24 @@ class DeclAnnotator : public clang::DeclVisitor<DeclAnnotator> {
       }
       return;
     }
-    annotations_.push_back(std::move(annotation));
+    annotations_.push_back(annotation);
   }
+
+  /// \brief determines if we should skip trying to record an annotation for
+  /// this decl.
+  ///
+  /// In Objective-C, the nullability attribute is troublesome because:
+  /// 1) The range we get for the Decl is backwards (goes from the e to the n in
+  /// nullable).
+  /// 2) The token is transformed to _Nullable by the time we analyze. nullable
+  /// is placed to the left of types, _Nullable is placed to the right of types.
+  bool ShouldSkipDecl(const clang::Decl *decl, const clang::QualType &qt,
+                      const clang::SourceRange &sr) {
+    clang::Optional<clang::NullabilityKind> k =
+        qt->getNullability(decl->getASTContext());
+    return k && sr.getBegin().getRawEncoding() > sr.getEnd().getRawEncoding();
+  }
+
   MarkedSourceCache *cache_;
   clang::tooling::Replacements *replacements_;
   clang::SourceLocation original_begin_;
@@ -446,12 +499,15 @@ bool MarkedSourceGenerator::WillGenerateMarkedSource() const {
   if (decl_->isImplicit() || implicit_) {
     return false;
   }
-  // Both of these are more or less dependent on one another.
-  if (llvm::isa<clang::FunctionDecl>(decl_) ||
-      llvm::isa<clang::ParmVarDecl>(decl_)) {
-    return true;
-  }
-  return false;
+  return llvm::isa<clang::FunctionDecl>(decl_) ||
+         llvm::isa<clang::VarDecl>(decl_) ||
+         llvm::isa<clang::NamespaceDecl>(decl_) ||
+         llvm::isa<clang::TagDecl>(decl_) ||
+         llvm::isa<clang::TypedefNameDecl>(decl_) ||
+         llvm::isa<clang::FieldDecl>(decl_) ||
+         llvm::isa<clang::EnumConstantDecl>(decl_) ||
+         llvm::isa<clang::ObjCMethodDecl>(decl_) ||
+         llvm::isa<clang::ObjCContainerDecl>(decl_);
 }
 
 std::string GetDeclName(const clang::LangOptions &lang_options,
@@ -518,9 +574,8 @@ void MarkedSourceGenerator::ReplaceMarkedSourceWithTemplateArgumentList(
           return false;
         case clang::TemplateArgument::Type:
           list_prefix.addArgument(clang::TemplateArgumentLoc(
-              arg,
-              cache_->sema()->getASTContext().getTrivialTypeSourceInfo(
-                  arg.getAsType())));
+              arg, cache_->sema()->getASTContext().getTrivialTypeSourceInfo(
+                       arg.getAsType())));
           return true;
         case clang::TemplateArgument::Declaration:
         case clang::TemplateArgument::NullPtr:
@@ -590,7 +645,7 @@ void MarkedSourceGenerator::ReplaceMarkedSourceWithTemplateArgumentList(
       llvm::raw_string_ostream stream(pre_text);
       print_arg.print(policy, stream);
     }
-    *next_arg->mutable_pre_text() = std::move(pre_text);
+    *next_arg->mutable_pre_text() = pre_text;
   }
 }
 
@@ -632,7 +687,7 @@ bool MarkedSourceGenerator::ReplaceMarkedSourceWithQualifiedName(
           llvm::raw_string_ostream stream(pre_text);
           stream << spec->getName();
         }
-        *class_name->mutable_pre_text() = std::move(pre_text);
+        *class_name->mutable_pre_text() = pre_text;
         ReplaceMarkedSourceWithTemplateArgumentList(parent->add_child(), spec);
       } else {
         parent->set_kind(MarkedSource::IDENTIFIER);
@@ -663,7 +718,7 @@ bool MarkedSourceGenerator::ReplaceMarkedSourceWithQualifiedName(
             stream << *llvm::cast<clang::NamedDecl>(decl_context);
           }
         }
-        *parent->mutable_pre_text() = std::move(pre_text);
+        *parent->mutable_pre_text() = pre_text;
       }
     }
   }
@@ -675,9 +730,26 @@ bool MarkedSourceGenerator::ReplaceMarkedSourceWithQualifiedName(
 MaybeFew<MarkedSource> MarkedSourceGenerator::GenerateMarkedSourceUsingSource(
     const GraphObserver::NodeId &decl_id) {
   auto start_loc = decl_->getSourceRange().getBegin();
+  if (start_loc.isMacroID()) {
+    start_loc = cache_->source_manager().getExpansionLoc(start_loc);
+  }
+  auto end_loc = end_loc_.isMacroID()
+                     ? cache_->source_manager().getExpansionLoc(end_loc_)
+                     : end_loc_;
   auto range = GetTextRange(cache_->source_manager(),
-                            clang::SourceRange(start_loc, end_loc_));
+                            clang::SourceRange(start_loc, end_loc));
   if (range.empty()) {
+    if (VLOG_IS_ON(1)) {
+      VLOG(1) << "GetTextRange failed for " << decl_->getDeclKindName() << " "
+              << decl_->getQualifiedNameAsString() << "\n at "
+              << start_loc.printToString(cache_->source_manager()) << "\n to "
+              << end_loc.printToString(cache_->source_manager())
+              << "\n originally "
+              << decl_->getSourceRange().getBegin().printToString(
+                     cache_->source_manager())
+              << "\n         to "
+              << end_loc_.printToString(cache_->source_manager());
+    }
     return None();
   }
   MarkedSource out_sig;
@@ -688,8 +760,8 @@ MaybeFew<MarkedSource> MarkedSourceGenerator::GenerateMarkedSourceUsingSource(
     auto formatted_range = Reformat(cache_->lang_options(), range.str(),
                                     &replacements, &incomplete);
     if (incomplete) {
-      LOG(WARNING) << "Incomplete reformatting for "
-                   << decl_id.getRawIdentity();
+      LOG(WARNING) << "Incomplete reformatting for " << decl_id.getRawIdentity()
+                   << " (" << decl_->getQualifiedNameAsString() << ")";
       return None();
     }
     DeclAnnotator annotator(cache_, &replacements, start_loc, formatted_range,
@@ -718,6 +790,12 @@ MarkedSource MarkedSourceGenerator::GenerateMarkedSourceForFunction(
   return out;
 }
 
+MarkedSource MarkedSourceGenerator::GenerateMarkedSourceForNamedDecl() {
+  MarkedSource out;
+  ReplaceMarkedSourceWithQualifiedName(&out);
+  return out;
+}
+
 MaybeFew<MarkedSource> MarkedSourceGenerator::GenerateMarkedSource(
     const GraphObserver::NodeId &decl_id) {
   // MarkedSource generation is expensive. If we're not going to write out the
@@ -726,7 +804,7 @@ MaybeFew<MarkedSource> MarkedSourceGenerator::GenerateMarkedSource(
   if (!WillGenerateMarkedSource()) {
     return None();
   }
-  if (llvm::isa<clang::VarDecl>(decl_)) {
+  if (llvm::isa<clang::VarDecl>(decl_) || llvm::isa<clang::FieldDecl>(decl_)) {
     return GenerateMarkedSourceUsingSource(decl_id);
   } else if (const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl_)) {
     if (FLAGS_pretty_print_function_prototypes) {
@@ -734,7 +812,9 @@ MaybeFew<MarkedSource> MarkedSourceGenerator::GenerateMarkedSource(
     } else {
       return GenerateMarkedSourceUsingSource(decl_id);
     }
+  } else if (llvm::isa<clang::ObjCMethodDecl>(decl_)) {
+    return GenerateMarkedSourceUsingSource(decl_id);
   }
-  return None();
+  return GenerateMarkedSourceForNamedDecl();
 }
 }  // namespace kythe

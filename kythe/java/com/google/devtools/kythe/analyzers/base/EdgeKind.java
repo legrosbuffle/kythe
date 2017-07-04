@@ -21,22 +21,27 @@ public enum EdgeKind {
   DEFINES(true, "defines"),
   DEFINES_BINDING(true, "defines/binding"),
   DOCUMENTS(true, "documents"),
+  TAGGED(true, "tagged"),
 
   REF(true, "ref"),
   REF_CALL(true, "ref/call"),
   REF_DOC(true, "ref/doc"),
+  REF_FILE(true, "ref/file"),
   REF_IMPORTS(true, "ref/imports"),
 
   ANNOTATED_BY("annotatedby"),
   BOUNDED_LOWER("bounded/lower"),
   BOUNDED_UPPER("bounded/upper"),
   CHILDOF("childof"),
+  DEPENDS("depends"),
+  EXPORTS("exports"),
   EXTENDS("extends"),
   NAMED("named"),
   OVERRIDES("overrides"),
   OVERRIDES_TRANSITIVE("overrides/transitive"),
   PARAM("param"),
-  TYPED("typed");
+  TYPED("typed"),
+  GENERATES("generates");
 
   private static final String EDGE_PREFIX = "/kythe/edge/";
 

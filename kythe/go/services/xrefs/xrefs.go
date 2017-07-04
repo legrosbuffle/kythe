@@ -30,6 +30,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"kythe.io/kythe/go/services/web"
@@ -47,7 +48,17 @@ import (
 	xpb "kythe.io/kythe/proto/xref_proto"
 )
 
-var disableSlowPaths = flag.Bool("disable_slow_paths", false, "Disable all slow path serving code")
+// TODO(schroederc): remove all Slow* functions and their corresponding flags
+var (
+	disableAllSlowPaths = flag.Bool("disable_slow_paths", false, "Disable all slow path serving code")
+
+	disableSlowOverrides     = flag.Bool("disable_slow_overrides", false, "Disable SlowOverrides serving code")
+	disableSlowDefinitions   = flag.Bool("disable_slow_definitions", false, "Disable SlowDefinitions serving code")
+	disableSlowDecls         = flag.Bool("disable_slow_declarations", false, "Disable SlowDeclarationsForCrossReferences serving code")
+	disableSlowCallers       = flag.Bool("disable_slow_callers", false, "Disable SlowCallersForCrossReferences serving code")
+	disableSlowDocumentation = flag.Bool("disable_slow_documentation", false, "Disable SlowDocumentation serving code")
+	disableSlowSignatures    = flag.Bool("disable_slow_signatures", false, "Disable SlowSignature serving code")
+)
 
 // Service defines the interface for file based cross-references.  Informally,
 // the cross-references of an entity comprise the definitions of that entity,
@@ -129,24 +140,23 @@ func IsDefKind(requestedKind xpb.CrossReferencesRequest_DefinitionKind, edgeKind
 	case xpb.CrossReferencesRequest_ALL_DEFINITIONS:
 		return edges.IsVariant(edgeKind, edges.Defines) || edges.IsVariant(edgeKind, edges.Completes)
 	default:
-		panic("unhandled CrossReferencesRequest_DefinitionKind")
+		log.Printf("ERROR: unhandled CrossReferencesRequest_DefinitionKind: %v", requestedKind)
+		return false
 	}
 }
 
 // IsDeclKind reports whether the given edgeKind matches the requested
 // declaration kind
 func IsDeclKind(requestedKind xpb.CrossReferencesRequest_DeclarationKind, edgeKind string, incomplete bool) bool {
-	if !incomplete {
-		return false
-	}
 	edgeKind = edges.Canonical(edgeKind)
 	switch requestedKind {
 	case xpb.CrossReferencesRequest_NO_DECLARATIONS:
 		return false
 	case xpb.CrossReferencesRequest_ALL_DECLARATIONS:
-		return edges.IsVariant(edgeKind, edges.Defines)
+		return (incomplete && edges.IsVariant(edgeKind, edges.Defines)) || edgeKind == internalDeclarationKind
 	default:
-		panic("unhandled CrossReferenceRequest_DeclarationKind")
+		log.Printf("ERROR: unhandled CrossReferenceRequest_DeclarationKind: %v", requestedKind)
+		return false
 	}
 }
 
@@ -164,21 +174,44 @@ func IsRefKind(requestedKind xpb.CrossReferencesRequest_ReferenceKind, edgeKind 
 	case xpb.CrossReferencesRequest_ALL_REFERENCES:
 		return edges.IsVariant(edgeKind, edges.Ref)
 	default:
-		panic("unhandled CrossReferencesRequest_ReferenceKind")
+		log.Printf("ERROR: unhandled CrossReferencesRequest_ReferenceKind: %v", requestedKind)
+		return false
 	}
 }
 
-// IsDocKind determines whether the given edgeKind matches the requested
-// documentation kind.
-func IsDocKind(requestedKind xpb.CrossReferencesRequest_DocumentationKind, edgeKind string) bool {
+// Internal-only edge kinds for cross-references
+const (
+	internalKindPrefix         = "#internal/"
+	internalCallerKindDirect   = internalKindPrefix + "ref/call/direct"
+	internalCallerKindOverride = internalKindPrefix + "ref/call/override"
+	internalDeclarationKind    = internalKindPrefix + "ref/declare"
+)
+
+// IsInternalKind determines whether the given edge kind is an internal variant.
+func IsInternalKind(kind string) bool {
+	return strings.HasPrefix(kind, internalKindPrefix)
+}
+
+// IsRelatedNodeKind determines whether the give edge kind is a non-anchor,
+// related node kind.
+func IsRelatedNodeKind(kind string) bool {
+	return !IsInternalKind(kind) && !edges.IsAnchorEdge(kind)
+}
+
+// IsCallerKind determines whether the given edgeKind matches the requested
+// caller kind.
+func IsCallerKind(requestedKind xpb.CrossReferencesRequest_CallerKind, edgeKind string) bool {
 	edgeKind = edges.Canonical(edgeKind)
 	switch requestedKind {
-	case xpb.CrossReferencesRequest_NO_DOCUMENTATION:
+	case xpb.CrossReferencesRequest_NO_CALLERS:
 		return false
-	case xpb.CrossReferencesRequest_ALL_DOCUMENTATION:
-		return edges.IsVariant(edgeKind, edges.Documents)
+	case xpb.CrossReferencesRequest_DIRECT_CALLERS:
+		return edgeKind == internalCallerKindDirect
+	case xpb.CrossReferencesRequest_OVERRIDE_CALLERS:
+		return edgeKind == internalCallerKindDirect || edgeKind == internalCallerKindOverride
 	default:
-		panic("unhandled CrossDocumentationRequest_DocumentationKind")
+		log.Printf("ERROR: unhandled CrossReferencesRequest_CallerKind: %v", requestedKind)
+		return false
 	}
 }
 
@@ -248,7 +281,7 @@ func AllEdges(ctx context.Context, es GraphService, req *gpb.EdgesRequest) (*gpb
 // SlowOverrides retrieves the list of Overrides for every input ticket. The map that it
 // returns will only contain entries for input tickets that have at least one Override.
 func SlowOverrides(ctx context.Context, xs Service, tickets []string) (map[string][]*xpb.DecorationsReply_Override, error) {
-	if *disableSlowPaths {
+	if *disableSlowOverrides || *disableAllSlowPaths {
 		log.Println("SlowOverrides disabled")
 		return nil, nil
 	}
@@ -270,7 +303,7 @@ func SlowOverrides(ctx context.Context, xs Service, tickets []string) (map[strin
 		sig, err := SlowSignature(ctx, xs, target)
 		if err != nil {
 			log.Printf("SlowOverrides: error getting signature for %s: %v", target, err)
-			sig = &xpb.MarkedSource{}
+			sig = &cpb.MarkedSource{}
 		}
 		okind := xpb.DecorationsReply_Override_EXTENDS
 		if edgeKind == edges.Overrides {
@@ -295,7 +328,7 @@ func SlowOverrides(ctx context.Context, xs Service, tickets []string) (map[strin
 // definition will be returned only if it is unambiguous, but the definition may be indirect
 // (through an intermediary node).
 func SlowDefinitions(ctx context.Context, xs Service, tickets []string) (map[string]*xpb.Anchor, error) {
-	if *disableSlowPaths {
+	if *disableSlowDefinitions || *disableAllSlowPaths {
 		log.Println("SlowDefinitions disabled")
 		return nil, nil
 	}
@@ -359,10 +392,13 @@ func SlowDefinitions(ctx context.Context, xs Service, tickets []string) (map[str
 
 // SlowDeclarationsForCrossReferences finds the tickets of every declaration completed by the same definitions.
 func SlowDeclarationsForCrossReferences(ctx context.Context, xs Service, ticket string) ([]string, error) {
-	if *disableSlowPaths {
+	if *disableSlowDecls || *disableAllSlowPaths {
 		log.Println("SlowDeclarationsForCrossReferences disabled")
 		return nil, nil
 	}
+	start := time.Now()
+	defer func() { log.Printf("SlowDeclarationsForCrossReferences: %s", time.Since(start)) }()
+	log.Println("WARNING: performing slow-lookup of declarations")
 	// Find the set of definitions covered by the ticket (which may be either a declaration or a definition).
 	reply, err := xs.CrossReferences(ctx, &xpb.CrossReferencesRequest{
 		Ticket:         []string{ticket},
@@ -494,6 +530,12 @@ func (p *Patcher) Patch(spanStart, spanEnd int32) (newStart, newEnd int32, exist
 	return 0, 0, false
 }
 
+// PatchSpan returns the given Span's byte offsets mapped from the Patcher's
+// oldText to its newText using Patcher.Patch.
+func (p *Patcher) PatchSpan(span *cpb.Span) (newStart, newEnd int32, exists bool) {
+	return p.Patch(span.GetStart().GetByteOffset(), span.GetEnd().GetByteOffset())
+}
+
 // Normalizer fixes xref.Locations within a given source text so that each point
 // has consistent byte_offset, line_number, and column_offset fields within the
 // range of text's length and its line lengths.
@@ -531,20 +573,40 @@ func (n *Normalizer) Location(loc *xpb.Location) (*xpb.Location, error) {
 		return nl, nil
 	}
 
-	if loc.Start == nil {
-		return nil, errors.New("invalid SPAN: missing start point")
-	} else if loc.End == nil {
-		return nil, errors.New("invalid SPAN: missing end point")
+	if loc.Span == nil {
+		return nil, errors.New("invalid SPAN: missing span")
+	} else if loc.Span.Start == nil {
+		return nil, errors.New("invalid SPAN: missing span start point")
+	} else if loc.Span.End == nil {
+		return nil, errors.New("invalid SPAN: missing span end point")
 	}
 
-	nl.Start = n.Point(loc.Start)
-	nl.End = n.Point(loc.End)
+	nl.Span = n.Span(loc.Span)
 
-	start, end := nl.Start.ByteOffset, nl.End.ByteOffset
+	start, end := nl.Span.Start.ByteOffset, nl.Span.End.ByteOffset
 	if start > end {
 		return nil, fmt.Errorf("invalid SPAN: start (%d) is after end (%d)", start, end)
 	}
 	return nl, nil
+}
+
+// Span returns a Span with its start and end normalized.
+func (n *Normalizer) Span(s *cpb.Span) *cpb.Span {
+	if s == nil {
+		return nil
+	}
+	return &cpb.Span{
+		Start: n.Point(s.Start),
+		End:   n.Point(s.End),
+	}
+}
+
+// SpanOffsets returns a Span based on normalized start and end byte offsets.
+func (n *Normalizer) SpanOffsets(start, end int32) *cpb.Span {
+	return &cpb.Span{
+		Start: n.ByteOffset(start),
+		End:   n.ByteOffset(end),
+	}
 }
 
 var lineEnd = []byte("\n")
@@ -552,7 +614,7 @@ var lineEnd = []byte("\n")
 // Point returns a normalized point within the Normalizer's text.  A normalized
 // point has all of its fields set consistently and clamped within the range
 // [0,len(text)).
-func (n *Normalizer) Point(p *xpb.Location_Point) *xpb.Location_Point {
+func (n *Normalizer) Point(p *cpb.Point) *cpb.Point {
 	if p == nil {
 		return nil
 	}
@@ -560,7 +622,7 @@ func (n *Normalizer) Point(p *xpb.Location_Point) *xpb.Location_Point {
 	if p.ByteOffset > 0 {
 		return n.ByteOffset(p.ByteOffset)
 	} else if p.LineNumber > 0 {
-		np := &xpb.Location_Point{
+		np := &cpb.Point{
 			LineNumber:   p.LineNumber,
 			ColumnOffset: p.ColumnOffset,
 		}
@@ -582,14 +644,14 @@ func (n *Normalizer) Point(p *xpb.Location_Point) *xpb.Location_Point {
 		return np
 	}
 
-	return &xpb.Location_Point{LineNumber: 1}
+	return &cpb.Point{LineNumber: 1}
 }
 
 // ByteOffset returns a normalized point based on the given offset within the
 // Normalizer's text.  A normalized point has all of its fields set consistently
 // and clamped within the range [0,len(text)).
-func (n *Normalizer) ByteOffset(offset int32) *xpb.Location_Point {
-	np := &xpb.Location_Point{ByteOffset: offset}
+func (n *Normalizer) ByteOffset(offset int32) *cpb.Point {
+	np := &cpb.Point{ByteOffset: offset}
 	if np.ByteOffset > n.textLen {
 		np.ByteOffset = n.textLen
 	}
@@ -606,14 +668,24 @@ func (n *Normalizer) ByteOffset(offset int32) *xpb.Location_Point {
 func ConvertFilters(filters []string) []*regexp.Regexp {
 	var patterns []*regexp.Regexp
 	for _, filter := range filters {
-		patterns = append(patterns, filterToRegexp(filter))
+		re := filterToRegexp(filter)
+		if re == matchesAll {
+			return []*regexp.Regexp{re}
+		}
+		patterns = append(patterns, re)
 	}
 	return patterns
 }
 
-var filterOpsRE = regexp.MustCompile("[*][*]|[*?]")
+var (
+	filterOpsRE = regexp.MustCompile("[*][*]|[*?]")
+	matchesAll  = regexp.MustCompile(".*")
+)
 
 func filterToRegexp(pattern string) *regexp.Regexp {
+	if pattern == "**" {
+		return matchesAll
+	}
 	var re string
 	for {
 		loc := filterOpsRE.FindStringIndex(pattern)
@@ -639,7 +711,7 @@ func filterToRegexp(pattern string) *regexp.Regexp {
 // MatchesAny reports whether if str matches any of the patterns
 func MatchesAny(str string, patterns []*regexp.Regexp) bool {
 	for _, p := range patterns {
-		if p.MatchString(str) {
+		if p == matchesAll || p.MatchString(str) {
 			return true
 		}
 	}
@@ -763,10 +835,13 @@ type CallersReply struct {
 // SlowCallersForCrossReferences is an implementation of callgraph support meant
 // for intermediate-term use by CrossReferences.
 func SlowCallersForCrossReferences(ctx context.Context, service Service, req *CallersRequest) (*CallersReply, error) {
-	if *disableSlowPaths {
+	if *disableSlowCallers || *disableAllSlowPaths {
 		log.Println("SlowCallersForCrossReferences disabled")
 		return &CallersReply{}, nil
 	}
+	start := time.Now()
+	defer func() { log.Printf("SlowCallersForCrossReferences: %s", time.Since(start)) }()
+	log.Println("WARNING: performing slow-lookup of callers")
 	ticket, err := kytheuri.Fix(req.Ticket)
 	if err != nil {
 		return nil, err
@@ -779,14 +854,13 @@ func SlowCallersForCrossReferences(ctx context.Context, service Service, req *Ca
 	}
 	// This will not recursively call SlowCallersForCrossReferences as we're requesting NO_CALLERS above.
 	xrefs, err := service.CrossReferences(ctx, &xpb.CrossReferencesRequest{
-		Ticket:            callees.Elements(),
-		DefinitionKind:    xpb.CrossReferencesRequest_NO_DEFINITIONS,
-		ReferenceKind:     xpb.CrossReferencesRequest_CALL_REFERENCES,
-		DocumentationKind: xpb.CrossReferencesRequest_NO_DOCUMENTATION,
-		CallerKind:        xpb.CrossReferencesRequest_NO_CALLERS,
-		AnchorText:        true,
-		PageSize:          req.PageSize,
-		PageToken:         req.PageToken,
+		Ticket:         callees.Elements(),
+		DefinitionKind: xpb.CrossReferencesRequest_NO_DEFINITIONS,
+		ReferenceKind:  xpb.CrossReferencesRequest_CALL_REFERENCES,
+		CallerKind:     xpb.CrossReferencesRequest_NO_CALLERS,
+		AnchorText:     true,
+		PageSize:       req.PageSize,
+		PageToken:      req.PageToken,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("can't get CrossReferences for callees set: %v", err)
@@ -858,7 +932,7 @@ func SlowCallersForCrossReferences(ctx context.Context, service Service, req *Ca
 			log.Printf("Warning: missing expanded anchor for caller %v", ticket)
 			continue
 		}
-		var signature *xpb.MarkedSource
+		var signature *cpb.MarkedSource
 		if req.GenerateSignatures {
 			signature, err = SlowSignature(ctx, service, caller)
 			if err != nil {
@@ -938,7 +1012,7 @@ func getLanguage(ticket string) string {
 }
 
 // slowLookupMeta retrieves the meta node for some node kind in some language.
-func slowLookupMeta(ctx context.Context, service Service, language string, kind string) (*xpb.MarkedSource, error) {
+func slowLookupMeta(ctx context.Context, service Service, language string, kind string) (*cpb.MarkedSource, error) {
 	uri := kytheuri.URI{Language: language, Signature: kind + "#meta"}
 	req := &gpb.NodesRequest{
 		Ticket: []string{uri.String()},
@@ -950,7 +1024,7 @@ func slowLookupMeta(ctx context.Context, service Service, language string, kind 
 	}
 	for _, node := range nodes.Nodes {
 		for _, value := range node.Facts {
-			rsig := &xpb.MarkedSource{}
+			rsig := &cpb.MarkedSource{}
 			err = proto.Unmarshal(value, rsig)
 			return rsig, err
 		}
@@ -985,7 +1059,7 @@ func getFactValue(edges *gpb.EdgesReply, ticket, fact string) []byte {
 type SignatureDetails struct {
 	// Maps from tickets to node kinds.
 	kinds      map[string]string
-	signatures map[string]*xpb.MarkedSource
+	signatures map[string]*cpb.MarkedSource
 	// The tickets of this node's parameters (in parameter order).
 	params []string
 	// The first default param, if one is set.
@@ -1015,7 +1089,7 @@ func findSignatureDetails(ctx context.Context, service Service, ticket string) (
 	}
 	details := SignatureDetails{
 		kinds:         make(map[string]string),
-		signatures:    make(map[string]*xpb.MarkedSource),
+		signatures:    make(map[string]*cpb.MarkedSource),
 		defaultParams: make(map[string]int),
 	}
 	for nodeTicket, node := range allEdges.Nodes {
@@ -1027,7 +1101,7 @@ func findSignatureDetails(ctx context.Context, service Service, ticket string) (
 			}
 		}
 		if sersig := node.Facts[facts.Code]; len(sersig) != 0 {
-			sig := &xpb.MarkedSource{}
+			sig := &cpb.MarkedSource{}
 			if proto.Unmarshal(sersig, sig) == nil {
 				details.signatures[nodeTicket] = sig
 			}
@@ -1050,7 +1124,7 @@ type slowSignatureState struct {
 	// ticket's kind.
 	kind string
 	// The MarkedSource being traversed.
-	marked *xpb.MarkedSource
+	marked *cpb.MarkedSource
 	// ticket's first default parameter, or negative if there is no such parameter.
 	defaultParam int
 	// Details about ticket and its params.
@@ -1061,10 +1135,10 @@ type slowSignatureState struct {
 
 // slowSignatureTraverseLevel traverses MarkedSource data for one particular ticket. If it needs to
 // issue graph queries for other tickets, it will defer to slowSignatureLevel (at the next depth).
-func slowSignatureTraverseLevel(s slowSignatureState) (*xpb.MarkedSource, error) {
+func slowSignatureTraverseLevel(s slowSignatureState) (*cpb.MarkedSource, error) {
 	// Copy the template MarkedSource to the output MarkedSource. We may elaborate the template depending on its kind.
 	// Data that are irrelevant for static MarkedSource nodes (like LookupIndex) are dropped.
-	outsig := &xpb.MarkedSource{
+	outsig := &cpb.MarkedSource{
 		Kind:                 s.marked.Kind,
 		PreText:              s.marked.PreText,
 		PostChildText:        s.marked.PostChildText,
@@ -1074,8 +1148,8 @@ func slowSignatureTraverseLevel(s slowSignatureState) (*xpb.MarkedSource, error)
 		Link:                 s.marked.Link,
 	}
 	switch s.marked.Kind {
-	case xpb.MarkedSource_PARAMETER_LOOKUP_BY_PARAM, xpb.MarkedSource_PARAMETER_LOOKUP_BY_PARAM_WITH_DEFAULTS:
-		outsig.Kind = xpb.MarkedSource_PARAMETER
+	case cpb.MarkedSource_PARAMETER_LOOKUP_BY_PARAM, cpb.MarkedSource_PARAMETER_LOOKUP_BY_PARAM_WITH_DEFAULTS:
+		outsig.Kind = cpb.MarkedSource_PARAMETER
 		if int(s.marked.LookupIndex) >= len(s.details.params) {
 			log.Printf("Lookup index out of bounds for ticket %v", s.ticket)
 			return outsig, nil
@@ -1096,7 +1170,7 @@ func slowSignatureTraverseLevel(s slowSignatureState) (*xpb.MarkedSource, error)
 				outsig.Child = append(outsig.Child, outc)
 			}
 		}
-		if s.marked.Kind == xpb.MarkedSource_PARAMETER_LOOKUP_BY_PARAM_WITH_DEFAULTS && s.defaultParam >= 0 {
+		if s.marked.Kind == cpb.MarkedSource_PARAMETER_LOOKUP_BY_PARAM_WITH_DEFAULTS && s.defaultParam >= 0 {
 			count := len(s.details.params) - s.defaultParam
 			if int(s.marked.LookupIndex) > s.defaultParam {
 				count -= int(s.marked.LookupIndex) - s.defaultParam
@@ -1107,9 +1181,9 @@ func slowSignatureTraverseLevel(s slowSignatureState) (*xpb.MarkedSource, error)
 				outsig.DefaultChildrenCount = uint32(count)
 			}
 		}
-	case xpb.MarkedSource_LOOKUP_BY_PARAM:
+	case cpb.MarkedSource_LOOKUP_BY_PARAM:
 		if int(s.marked.LookupIndex) >= len(s.details.params) {
-			outsig.Kind = xpb.MarkedSource_BOX
+			outsig.Kind = cpb.MarkedSource_BOX
 			log.Printf("Couldn't look up param %v of node with ticket %v: param out of range", s.marked.LookupIndex, s.ticket)
 		} else {
 			param := s.details.params[s.marked.LookupIndex]
@@ -1153,9 +1227,9 @@ func slowSignatureTraverseLevel(s slowSignatureState) (*xpb.MarkedSource, error)
 // slowSignatureLevel issues graph queries to traverse s.ticket's MarkedSource.
 // In particular, it replaces the details field of s with an appropriate details struct
 // for s.ticket, then calls recursively to slowSignatureTraverseLevel.
-func slowSignatureLevel(s slowSignatureState) (*xpb.MarkedSource, error) {
+func slowSignatureLevel(s slowSignatureState) (*cpb.MarkedSource, error) {
 	if s.depth > maxFormatExpansions {
-		return &xpb.MarkedSource{Kind: xpb.MarkedSource_BOX, PreText: "..."}, nil
+		return &cpb.MarkedSource{Kind: cpb.MarkedSource_BOX, PreText: "..."}, nil
 	}
 	if s.kind == "" {
 		log.Printf("Node %v missing kind", s.ticket)
@@ -1191,12 +1265,15 @@ func slowSignatureLevel(s slowSignatureState) (*xpb.MarkedSource, error) {
 	})
 }
 
-// SlowSignature generates an xpb.MarkedSource given a ticket.
-func SlowSignature(ctx context.Context, service Service, ticket string) (*xpb.MarkedSource, error) {
-	if *disableSlowPaths {
+// SlowSignature generates an cpb.MarkedSource given a ticket.
+func SlowSignature(ctx context.Context, service Service, ticket string) (*cpb.MarkedSource, error) {
+	if *disableSlowSignatures || *disableAllSlowPaths {
 		log.Println("SlowSignature disabled")
 		return nil, nil
 	}
+	start := time.Now()
+	defer func() { log.Printf("SlowSignature: %s", time.Since(start)) }()
+	log.Println("WARNING: performing slow-lookup of signature")
 	req := &gpb.NodesRequest{
 		Ticket: []string{ticket},
 		Filter: []string{facts.NodeKind, facts.Code, facts.ParamDefault},
@@ -1210,7 +1287,7 @@ func SlowSignature(ctx context.Context, service Service, ticket string) (*xpb.Ma
 	}
 
 	var kind string
-	var sig *xpb.MarkedSource
+	var sig *cpb.MarkedSource
 	defaultParam := -1
 	for _, node := range nodes.Nodes {
 		kind = string(node.Facts[facts.NodeKind])
@@ -1221,7 +1298,7 @@ func SlowSignature(ctx context.Context, service Service, ticket string) (*xpb.Ma
 			}
 		}
 		if node.Facts[facts.Code] != nil {
-			sig = &xpb.MarkedSource{}
+			sig = &cpb.MarkedSource{}
 			err = proto.Unmarshal(node.Facts[facts.Code], sig)
 			if err != nil {
 				return nil, fmt.Errorf("could not unmarshal signature: %v", err)
@@ -1243,7 +1320,7 @@ func SlowSignature(ctx context.Context, service Service, ticket string) (*xpb.Ma
 // Data from a doc node that documents some other ticket.
 type associatedDocNode struct {
 	rawText string
-	link    []*xpb.Link
+	link    []*cpb.Link
 	// Tickets this associatedDocNode documents.
 	documented []string
 }
@@ -1263,18 +1340,20 @@ type documentDetails struct {
 	// Maps tickets to Documents being prepared. More than one ticket may map to the same preDocument
 	// (e.g., if they are in the same equivalence class defined by expandDefRelatedNodeSet.
 	ticketToPreDocument map[string]*preDocument
-	// Parent and type information for all expandDefRelatedNodeSet-expanded nodes.
-	ticketToParent, ticketToType map[string]string
+	// Maps tickets to MarkedSource.
+	ticketToMarkedSource map[string]*cpb.MarkedSource
 	// Tickets of known doc nodes.
 	docs stringset.Set
+	// Maps tickets to definition anchors when they're known.
+	ticketToDefinition map[string]*xpb.Anchor
 }
 
-// getDocRelatedNodes fills details with information about the kinds, parents, types, and associated doc nodes of allTickets.
+// getDocRelatedNodes fills details with information about the associated doc nodes of allTickets.
 func getDocRelatedNodes(ctx context.Context, service Service, details documentDetails, allTickets stringset.Set) error {
 	// We can't ask for text facts here (since they get filtered out).
 	dreq := &gpb.EdgesRequest{
 		Ticket:   allTickets.Elements(),
-		Kind:     []string{edges.Mirror(edges.Documents), edges.ChildOf, edges.Typed},
+		Kind:     []string{edges.Mirror(edges.Documents)},
 		PageSize: math.MaxInt32,
 		Filter:   []string{facts.NodeKind},
 	}
@@ -1289,16 +1368,6 @@ func getDocRelatedNodes(ctx context.Context, service Service, details documentDe
 		}
 	}
 	for sourceTicket, set := range dedges.EdgeSets {
-		if group := set.Groups[edges.ChildOf]; group != nil {
-			for _, edge := range group.Edge {
-				details.ticketToParent[sourceTicket] = edge.TargetTicket
-			}
-		}
-		if group := set.Groups[edges.Typed]; group != nil {
-			for _, edge := range group.Edge {
-				details.ticketToType[sourceTicket] = edge.TargetTicket
-			}
-		}
 		if group := set.Groups[edges.Mirror(edges.Documents)]; group != nil {
 			for _, edge := range group.Edge {
 				if preDoc := details.ticketToPreDocument[sourceTicket]; preDoc != nil {
@@ -1357,9 +1426,9 @@ func getDocLinks(ctx context.Context, service Service, details documentDetails) 
 		if assocDoc := details.docTicketToAssocNode[sourceTicket]; assocDoc != nil {
 			for _, group := range set.Groups {
 				params := extractParams(group.Edge)
-				assocDoc.link = make([]*xpb.Link, len(params))
+				assocDoc.link = make([]*cpb.Link, len(params))
 				for i, param := range extractParams(group.Edge) {
-					assocDoc.link[i] = &xpb.Link{Definition: []string{param}}
+					assocDoc.link[i] = &cpb.Link{Definition: []string{param}}
 				}
 			}
 		}
@@ -1370,16 +1439,25 @@ func getDocLinks(ctx context.Context, service Service, details documentDetails) 
 // compilePreDocument finishes and returns the Document attached to ticket's preDocument.
 func compilePreDocument(ctx context.Context, service Service, details documentDetails, ticket string, preDocument *preDocument) (*xpb.DocumentationReply_Document, error) {
 	document := preDocument.document
-	sig, err := SlowSignature(ctx, service, ticket)
-	if err != nil {
-		return nil, fmt.Errorf("can't get SlowSignature for %v: %v", ticket, err)
+	document.MarkedSource = details.ticketToMarkedSource[ticket]
+	if document.MarkedSource == nil {
+		log.Printf("WARNING: No signature stored for %v", ticket)
+		sig, err := SlowSignature(ctx, service, ticket)
+		if err != nil {
+			return nil, fmt.Errorf("can't get SlowSignature for %v: %v", ticket, err)
+		}
+		document.MarkedSource = sig
 	}
-	document.MarkedSource = sig
 	text := &xpb.Printable{}
 	document.Text = text
 	for _, assocDoc := range preDocument.docNode {
-		text.RawText = text.RawText + assocDoc.rawText
-		text.Link = append(text.Link, assocDoc.link...)
+		// Assume the longest document is the best one to show.
+		// TODO(zarko): Amend the API to pass down all documents and allow the
+		// client to make this decision (informed by provenance).
+		if len(assocDoc.rawText) > len(text.RawText) {
+			text.RawText = assocDoc.rawText
+			text.Link = assocDoc.link
+		}
 	}
 	return document, nil
 }
@@ -1397,7 +1475,7 @@ func linkTickets(p *xpb.Printable, s stringset.Set) {
 
 // signatureLinkTickets inserts into s all of the Definition tickets for all
 // links in sg and its children.
-func signatureLinkTickets(sg *xpb.MarkedSource, s stringset.Set) {
+func signatureLinkTickets(sg *cpb.MarkedSource, s stringset.Set) {
 	if sg == nil {
 		return
 	}
@@ -1411,28 +1489,163 @@ func signatureLinkTickets(sg *xpb.MarkedSource, s stringset.Set) {
 	}
 }
 
+// mergeDocumentationReply adds from's document to into.Document[0].Children and merges its Nodes and DefinitionLocations.
+func mergeDocumentationReply(from, into *xpb.DocumentationReply) {
+	into.Document[0].Children = append(into.Document[0].Children, from.Document...)
+	for k, v := range from.Nodes {
+		if into.Nodes == nil {
+			into.Nodes = make(map[string]*cpb.NodeInfo)
+		}
+		into.Nodes[k] = v
+	}
+	for k, v := range from.DefinitionLocations {
+		if into.DefinitionLocations == nil {
+			into.DefinitionLocations = make(map[string]*xpb.Anchor)
+		}
+		into.DefinitionLocations[k] = v
+	}
+}
+
+// slowMultilevelDocumentation is an implementation of the Documentation API (with IncludeChildren set) based on other APIs.
+func slowMultilevelDocumentation(ctx context.Context, service Service, req *xpb.DocumentationRequest) (*xpb.DocumentationReply, error) {
+	start := time.Now()
+	defer func() { log.Printf("slowMultilevelDocumentation: %s", time.Since(start)) }()
+	log.Println("WARNING: performing slow multilevel lookup of documentation")
+	if len(req.Ticket) != 1 {
+		return nil, fmt.Errorf("only expected one top-level ticket in slowMultilevelDocumentation")
+	}
+	tickets, err := FixTickets(req.Ticket)
+	if err != nil {
+		return nil, err
+	}
+	var subTickets stringset.Set
+	if err := forAllEdges(ctx, service, stringset.New(tickets...), []string{edges.Mirror(edges.ChildOf)},
+		func(_, target, targetKind, _ string) error {
+			if targetKind != nodes.Anchor {
+				subTickets.Add(target)
+			}
+			return nil
+		}); err != nil {
+		return nil, fmt.Errorf("error getting childof edges in slowMultilevelDocumentation: %v", err)
+	}
+	if len(subTickets) == 1 {
+		// The source ticket might have been an abs.
+		var subSubTickets stringset.Set
+		childTicket := subTickets.Elements()[0]
+		isAbsChild := false
+		if err := forAllEdges(ctx, service, stringset.New(childTicket), []string{edges.Mirror(edges.ChildOf), edges.ChildOf},
+			func(_, target, targetKind, edgeKind string) error {
+				if edgeKind == edges.ChildOf {
+					if targetKind == nodes.Abs {
+						isAbsChild = true
+					}
+				} else if targetKind != nodes.Anchor {
+					subSubTickets.Add(target)
+				}
+				return nil
+			}); err != nil {
+			return nil, fmt.Errorf("error getting childof edges in slowMultilevelDocumentation: %v", err)
+		}
+		if isAbsChild {
+			// Include the abs child's children along with the abs's children.
+			subTickets.Update(subSubTickets)
+			subTickets.Discard(childTicket)
+		}
+	}
+	retDoc, err := SlowDocumentation(ctx, service, &xpb.DocumentationRequest{
+		Ticket: []string{tickets[0]},
+		Filter: req.Filter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error getting root document in slowMultilevelDocumentation: %v", err)
+	}
+	if len(retDoc.Document) != 1 {
+		return nil, fmt.Errorf("unexpected number (%v) of root documents in slowMultilevelDocumentation", len(retDoc.Document))
+	}
+	for subTicket := range subTickets {
+		doc, err := SlowDocumentation(ctx, service, &xpb.DocumentationRequest{
+			Ticket: []string{subTicket},
+			Filter: req.Filter,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("error getting subdocument in slowMultilevelDocumentation: %v", err)
+		}
+		mergeDocumentationReply(doc, retDoc)
+	}
+	return retDoc, nil
+}
+
+const (
+	// The maximum number of times SlowDocumentation will flip CrossReferences pages.
+	maxDocumentationXrefPages = 10
+)
+
 // SlowDocumentation is an implementation of the Documentation API built from other APIs.
 func SlowDocumentation(ctx context.Context, service Service, req *xpb.DocumentationRequest) (*xpb.DocumentationReply, error) {
-	if *disableSlowPaths {
+	if *disableSlowDocumentation || *disableAllSlowPaths {
 		log.Println("SlowDocumentation disabled")
 		return &xpb.DocumentationReply{}, nil
 	}
+	if req.IncludeChildren {
+		return slowMultilevelDocumentation(ctx, service, req)
+	}
+	start := time.Now()
+	defer func() { log.Printf("SlowDocumentation: %s", time.Since(start)) }()
+	log.Println("WARNING: performing slow-lookup of documentation")
 	tickets, err := FixTickets(req.Ticket)
 	if err != nil {
 		return nil, err
 	}
 	details := documentDetails{
 		ticketToPreDocument:  make(map[string]*preDocument),
-		ticketToParent:       make(map[string]string),
-		ticketToType:         make(map[string]string),
 		docTicketToAssocNode: make(map[string]*associatedDocNode),
 		docs:                 make(stringset.Set),
+		ticketToMarkedSource: make(map[string]*cpb.MarkedSource),
+		ticketToDefinition:   make(map[string]*xpb.Anchor),
 	}
 	// We assume that expandDefRelatedNodeSet will return disjoint sets (and thus we can treat them as equivalence classes
 	// with the original request's ticket as the characteristic element).
 	var allTickets stringset.Set
+	var ambiguousDefinitionTickets stringset.Set
+	var pageToken string
+	pagesFlipped := 0
+	// Try to get signatures from CrossReferences, which is potentially faster.
+	for ; pagesFlipped < maxDocumentationXrefPages; pagesFlipped++ {
+		xReply, err := service.CrossReferences(ctx, &xpb.CrossReferencesRequest{
+			Ticket:                 tickets,
+			PageToken:              pageToken,
+			DefinitionKind:         xpb.CrossReferencesRequest_BINDING_DEFINITIONS,
+			ExperimentalSignatures: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for ticket, xrefSet := range xReply.CrossReferences {
+			details.ticketToMarkedSource[ticket] = xrefSet.MarkedSource
+			if !ambiguousDefinitionTickets.Contains(ticket) {
+				for _, def := range xrefSet.Definition {
+					if def.Anchor.Kind == edges.DefinesBinding {
+						if details.ticketToDefinition[ticket] != nil {
+							delete(details.ticketToDefinition, ticket)
+							ambiguousDefinitionTickets.Add(ticket)
+						} else {
+							details.ticketToDefinition[ticket] = def.Anchor
+						}
+					}
+				}
+			}
+		}
+		pageToken = xReply.NextPageToken
+		if pageToken == "" {
+			break
+		}
+	}
+	if pagesFlipped == maxDocumentationXrefPages {
+		log.Println("WARNING: Exceeded maxDocumentationXrefPages")
+	}
 	for _, ticket := range tickets {
 		// TODO(zarko): Include outbound override edges.
+		// TODO(zarko): Optimize this if possible from merge_with field in xref data
 		ticketSet, err := expandDefRelatedNodeSet(ctx, service, stringset.New(ticket) /*includeOverrides=*/, false)
 		if err != nil {
 			return nil, fmt.Errorf("couldn't expandDefRelatedNodeSet in Documentation: %v", err)
@@ -1467,12 +1680,32 @@ func SlowDocumentation(ctx context.Context, service Service, req *xpb.Documentat
 		definitionSet.Add(document.Ticket)
 		linkTickets(document.Text, definitionSet)
 		signatureLinkTickets(document.MarkedSource, definitionSet)
-		linkTickets(document.Initializer, definitionSet)
 		reply.Document = append(reply.Document, document)
 	}
+	var nodes map[string]*cpb.NodeInfo
+	if len(definitionSet) != 0 {
+		nodesReply, err := service.Nodes(ctx, &gpb.NodesRequest{
+			Filter: req.Filter,
+			Ticket: definitionSet.Elements(),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("during Nodes: %v", err)
+		}
+		nodes = nodesReply.Nodes
+	}
+	for ticket := range details.ticketToDefinition {
+		definitionSet.Discard(ticket)
+	}
+	definitionSet.Remove(ambiguousDefinitionTickets)
 	defs, err := SlowDefinitions(ctx, service, definitionSet.Elements())
 	if err != nil {
 		return nil, fmt.Errorf("during SlowDefinitions for %v: %v", definitionSet, err)
+	}
+	if defs == nil && len(details.ticketToDefinition) != 0 {
+		defs = make(map[string]*xpb.Anchor)
+	}
+	for ticket, def := range details.ticketToDefinition {
+		defs[ticket] = def
 	}
 	if len(defs) != 0 {
 		reply.DefinitionLocations = make(map[string]*xpb.Anchor, len(defs))
@@ -1480,13 +1713,9 @@ func SlowDocumentation(ctx context.Context, service Service, req *xpb.Documentat
 			reply.DefinitionLocations[def.Ticket] = def
 		}
 	}
-	nodes, err := service.Nodes(ctx, &gpb.NodesRequest{
-		Filter: req.Filter,
-		Ticket: definitionSet.Elements(),
-	})
-	if len(nodes.Nodes) != 0 {
-		reply.Nodes = make(map[string]*cpb.NodeInfo, len(nodes.Nodes))
-		for node, info := range nodes.Nodes {
+	if len(nodes) != 0 {
+		reply.Nodes = make(map[string]*cpb.NodeInfo, len(nodes))
+		for node, info := range nodes {
 			if def, ok := defs[node]; ok {
 				info.Definition = def.Ticket
 			}

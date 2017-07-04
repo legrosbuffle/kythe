@@ -20,6 +20,7 @@
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include "glog/logging.h"
 
@@ -135,7 +136,7 @@ class KytheGraphObserver : public GraphObserver {
  public:
   KytheGraphObserver(KytheGraphRecorder *recorder, KytheClaimClient *client,
                      const MetadataSupports *meta_supports,
-                     const llvm::IntrusiveRefCntPtr<IndexVFS> vfs,
+                     const llvm::IntrusiveRefCntPtr<IndexVFS> &vfs,
                      ProfilingCallback ReportProfileEventCallback)
       : recorder_(CHECK_NOTNULL(recorder)),
         client_(CHECK_NOTNULL(client)),
@@ -143,7 +144,7 @@ class KytheGraphObserver : public GraphObserver {
         vfs_(vfs) {
     default_token_.set_rough_claimed(true);
     type_token_.set_rough_claimed(true);
-    ReportProfileEvent = ReportProfileEventCallback;
+    ReportProfileEvent = std::move(ReportProfileEventCallback);
     RegisterBuiltins();
     EmitMetaNodes();
   }
@@ -220,15 +221,14 @@ class KytheGraphObserver : public GraphObserver {
   void recordDeclUseLocation(const Range &SourceRange, const NodeId &DeclId,
                              GraphObserver::Claimability Cl) override;
 
-  void recordVariableNode(const NameId &DeclName, const NodeId &DeclNode,
-                          Completeness VarCompleteness, VariableSubkind Subkind,
+  void recordVariableNode(const NodeId &DeclNode, Completeness VarCompleteness,
+                          VariableSubkind Subkind,
                           const MaybeFew<MarkedSource> &MarkedSource) override;
 
-  void recordNamespaceNode(const NameId &DeclName, const NodeId &DeclNode,
+  void recordNamespaceNode(const NodeId &DeclNode,
                            const MaybeFew<MarkedSource> &MarkedSource) override;
 
-  void recordUserDefinedNode(const NameId &Name, const NodeId &Id,
-                             const llvm::StringRef &NodeKind,
+  void recordUserDefinedNode(const NodeId &Id, const llvm::StringRef &NodeKind,
                              Completeness Compl) override;
 
   void recordFullDefinitionRange(const Range &SourceRange,
@@ -252,8 +252,6 @@ class KytheGraphObserver : public GraphObserver {
 
   void recordCompletionRange(const Range &SourceRange, const NodeId &DefnId,
                              Specificity Spec) override;
-
-  void recordNamedEdge(const NodeId &Node, const NameId &Name) override;
 
   void recordTypeSpellingLocation(const Range &SourceRange,
                                   const NodeId &TypeId,
@@ -301,9 +299,6 @@ class KytheGraphObserver : public GraphObserver {
 
   void recordBoundQueryRange(const Range &SourceRange,
                              const NodeId &MacroId) override;
-
-  void recordUnboundQueryRange(const Range &SourceRange,
-                               const NameId &MacroName) override;
 
   void pushFile(clang::SourceLocation BlameLocation,
                 clang::SourceLocation Location) override;
@@ -401,8 +396,6 @@ class KytheGraphObserver : public GraphObserver {
   kythe::proto::VName VNameFromFileEntry(const clang::FileEntry *file_entry);
   kythe::proto::VName ClaimableVNameFromFileID(const clang::FileID &file_id);
   kythe::proto::VName VNameFromRange(const GraphObserver::Range &range);
-  MaybeFew<kythe::proto::VName> RecordName(
-      const GraphObserver::NameId &name_id);
   void RecordAnchor(const GraphObserver::Range &source_range,
                     const GraphObserver::NodeId &primary_anchored_to,
                     EdgeKindID anchor_edge_kind, Claimability claimability);
@@ -443,7 +436,7 @@ class KytheGraphObserver : public GraphObserver {
     }
     static size_t ComputeHash(const clang::SourceRange &PhysicalRange,
                               EdgeKindID EdgeKind,
-                              const GraphObserver::NodeId EdgeTarget) {
+                              const GraphObserver::NodeId &EdgeTarget) {
       return std::hash<unsigned>()(PhysicalRange.getBegin().getRawEncoding()) ^
              (std::hash<unsigned>()(PhysicalRange.getEnd().getRawEncoding())
               << 1) ^
@@ -518,9 +511,6 @@ class KytheGraphObserver : public GraphObserver {
   /// are defined to have structure equivalent to their names (modulo
   /// non-primary types in case of aliases, which may still be stored
   /// redundantly), this will not obscure conflicting-fact errors.
-  /// The set of NameIds we have already emitted (identified by
-  /// NameId::ToString()).
-  std::unordered_set<std::string> written_name_ids_;
   /// The set of doc nodes we've emitted so far (identified by
   /// `NodeId::ToString()`).
   std::unordered_set<std::string> written_docs_;

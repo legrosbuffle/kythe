@@ -12,6 +12,7 @@ filegroup(
         "cxx.proto",
         "filecontext.proto",
         "filetree.proto",
+        "go.proto",
         "graph.proto",
         "java.proto",
         "status_service.proto",
@@ -129,12 +130,21 @@ proto_library(
     name = "cxx_proto",
     srcs = ["cxx.proto"],
     cc_api_version = 2,
+    go_api_version = 2,
+)
+
+# Go-specific protocol buffer definitions
+proto_library(
+    name = "go_proto",
+    srcs = ["go.proto"],
+    go_api_version = 2,
 )
 
 # Java-specific protocol buffer definitions
 proto_library(
     name = "java_proto",
     srcs = ["java.proto"],
+    go_api_version = 2,
     java_api_version = 2,
 )
 
@@ -162,6 +172,16 @@ proto_library(
     cc_api_version = 2,
     go_api_version = 2,
     java_api_version = 2,
+    visibility = [
+        # TODO(schroederc): prune once MarkedSource has migrated to common.proto
+        "//kythe/cxx/common:__pkg__",
+        "//kythe/cxx/doc:__pkg__",
+        "//kythe/go/platform/tools:__subpackages__",
+        "//kythe/go/services:__subpackages__",
+        "//kythe/go/serving:__subpackages__",
+        "//kythe/go/test:__subpackages__",
+        "//kythe/go/util/markedsource:__pkg__",
+    ],
     deps = [":common_proto"],
 )
 
@@ -183,6 +203,10 @@ proto_library(
     cc_api_version = 2,
     go_api_version = 2,
     java_api_version = 2,
+    visibility = [
+        "//kythe/go/serving:__subpackages__",
+        "//kythe/go/util/tools:__pkg__",
+    ],
     deps = [":common_proto"],
 )
 
@@ -197,4 +221,12 @@ proto_library(
         ":common_proto",
         ":serving_proto",
     ],
+)
+
+# Protocol buffer definitions used to record indexer outputs for storage.
+# WARNING: These should not be exposed to clients.
+proto_library(
+    name = "entryset_proto",
+    srcs = ["entryset.proto"],
+    go_api_version = 2,
 )

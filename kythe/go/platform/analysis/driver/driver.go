@@ -20,18 +20,26 @@ package driver
 
 import (
 	"context"
-	"errors"
-	"fmt"
+	goerrors "errors"
 	"io"
 	"log"
 
 	"kythe.io/kythe/go/platform/analysis"
 
 	apb "kythe.io/kythe/proto/analysis_proto"
+
+	"github.com/pkg/errors"
 )
 
+// A Compilation represents a compilation and other metadata needed to analyze it.
+type Compilation struct {
+	Unit       *apb.CompilationUnit // the compilation to analyze
+	Revision   string               // revision marker to attribute to the compilation
+	UnitDigest string               // unit digest identifying the compilation in a KCD
+}
+
 // CompilationFunc handles a single CompilationUnit.
-type CompilationFunc func(context.Context, *apb.CompilationUnit) error
+type CompilationFunc func(context.Context, Compilation) error
 
 // A Queue represents an ordered sequence of compilation units.
 type Queue interface {
@@ -41,99 +49,93 @@ type Queue interface {
 	Next(_ context.Context, f CompilationFunc) error
 }
 
+// A Context packages callbacks invoked during analysis.
+type Context interface {
+	// Setup is invoked after a compilation has been fetched from a Queue but
+	// before it is sent to the analyzer.  If Setup reports an error, analysis
+	// is aborted.
+	Setup(context.Context, Compilation) error
+
+	// Teardown is invoked after a analysis has completed for the compilation.
+	// If Teardown reports an error after analysis succeeds, it is logged but
+	// does not cause the analysis to fail.
+	Teardown(context.Context, Compilation) error
+
+	// AnalysisError is invoked for each non-nil error reported by the analyzer
+	// prior to calling Teardown. The error returned from AnalysisError replaces
+	// the error returned by the analyzer itself.
+	//
+	// If AnalysisError returns the special value ErrRetry, the analysis is
+	// retried immediately.
+	AnalysisError(context.Context, Compilation, error) error
+}
+
 // ErrRetry can be returned from a Driver's AnalysisError function to signal
 // that the driver should retry the analysis immediately.
-var ErrRetry = errors.New("retry analysis")
+var ErrRetry = goerrors.New("retry analysis")
 
 // Driver sends compilations sequentially from a queue to an analyzer.
 type Driver struct {
 	Analyzer        analysis.CompilationAnalyzer
 	FileDataService string
-
-	// Compilations is a queue of compilations to be sent for analysis.
-	Compilations Queue
-
-	// Setup is called after a compilation has been pulled from the Queue and
-	// before it is sent to the Analyzer (or Output is called).
-	Setup CompilationFunc
-	// Output is called for each analysis output returned from the Analyzer
-	Output analysis.OutputFunc
-	// Teardown is called after a compilation has been analyzed and there will be no further calls to Output.
-	Teardown CompilationFunc
-
-	// AnalysisError is called for each non-nil err returned from the Analyzer
-	// (before Teardown is called).  The error returned from AnalysisError
-	// replaces the analysis error that would normally be returned from Run.  If
-	// ErrRetry is returned, the analysis is retried immediately.
-	AnalysisError func(context.Context, *apb.CompilationUnit, error) error
+	Context         Context             // if nil, callbacks are no-ops
+	WriteOutput     analysis.OutputFunc // if nil, output is discarded
 }
 
-// IO is the IO subset of the analysis Driver struct.
-type IO interface {
-	// Setup is called after a compilation has been pulled from the Queue and
-	// before it is sent to the Analyzer (or Output is called).
-	Setup(context.Context, *apb.CompilationUnit) error
-	// Output is called for each analysis output returned from the Analyzer
-	Output(context.Context, *apb.AnalysisOutput) error
-	// Teardown is called after a compilation has been analyzed and there will be no further calls to Output.
-	Teardown(context.Context, *apb.CompilationUnit) error
-	// AnalysisError is called for each non-nil err returned from the Analyzer
-	// (before Teardown is called).  The error returned from AnalysisError
-	// replaces the analysis error that would normally be returned from Run.  If
-	// ErrRetry is returned, the analysis is retried immediately.
-	AnalysisError(context.Context, *apb.CompilationUnit, error) error
-}
-
-// Apply updates the Driver's IO functions to be that of the given interface.
-func (d *Driver) Apply(io IO) {
-	d.Setup = io.Setup
-	d.Output = io.Output
-	d.AnalysisError = io.AnalysisError
-	d.Teardown = io.Teardown
-}
-
-func (d *Driver) validate() error {
-	if d.Analyzer == nil {
-		return errors.New("missing Analyzer")
-	} else if d.Compilations == nil {
-		return errors.New("missing Compilations Queue")
-	} else if d.Output == nil {
-		return errors.New("missing Output function")
+func (d *Driver) writeOutput(ctx context.Context, out *apb.AnalysisOutput) error {
+	if write := d.WriteOutput; write != nil {
+		return write(ctx, out)
 	}
 	return nil
+}
+
+func (d *Driver) setup(ctx context.Context, unit Compilation) error {
+	if c := d.Context; c != nil {
+		return c.Setup(ctx, unit)
+	}
+	return nil
+}
+
+func (d *Driver) teardown(ctx context.Context, unit Compilation) error {
+	if c := d.Context; c != nil {
+		return c.Teardown(ctx, unit)
+	}
+	return nil
+}
+
+func (d *Driver) analysisError(ctx context.Context, unit Compilation, err error) error {
+	if c := d.Context; c != nil && err != nil {
+		return c.AnalysisError(ctx, unit, err)
+	}
+	return err
 }
 
 // Run sends each compilation received from the driver's Queue to the driver's
 // Analyzer.  All outputs are passed to Output in turn.  An error is immediately
 // returned if the Analyzer, Output, or Compilations fields are unset.
-func (d *Driver) Run(ctx context.Context) error {
-	if err := d.validate(); err != nil {
-		return err
+func (d *Driver) Run(ctx context.Context, queue Queue) error {
+	if d.Analyzer == nil {
+		return errors.New("no analyzer has been specified")
 	}
+
 	for {
-		if err := d.Compilations.Next(ctx, func(ctx context.Context, cu *apb.CompilationUnit) error {
-			if d.Setup != nil {
-				if err := d.Setup(ctx, cu); err != nil {
-					return fmt.Errorf("analysis setup error: %v", err)
-				}
+		if err := queue.Next(ctx, func(ctx context.Context, cu Compilation) error {
+			if err := d.setup(ctx, cu); err != nil {
+				return errors.WithMessage(err, "driver: analysis setup")
 			}
 			err := ErrRetry
 			for err == ErrRetry {
-				err = d.Analyzer.Analyze(ctx, &apb.AnalysisRequest{
-					Compilation:     cu,
+				err = d.analysisError(ctx, cu, d.Analyzer.Analyze(ctx, &apb.AnalysisRequest{
+					Compilation:     cu.Unit,
 					FileDataService: d.FileDataService,
-				}, d.Output)
-				if d.AnalysisError != nil && err != nil {
-					err = d.AnalysisError(ctx, cu, err)
-				}
+					Revision:        cu.Revision,
+				}, d.writeOutput))
 			}
-			if d.Teardown != nil {
-				if tErr := d.Teardown(ctx, cu); tErr != nil {
-					if err == nil {
-						return fmt.Errorf("analysis teardown error: %v", tErr)
-					}
-					log.Printf("WARNING: analysis teardown error after analysis error: %v (analysis error: %v)", tErr, err)
+			if terr := d.teardown(ctx, cu); terr != nil {
+				if err == nil {
+					return errors.WithMessage(terr, "driver: analysis teardown")
 				}
+				log.Printf("WARNING: analysis teardown failed: %v (analysis error: %v)", terr, err)
 			}
 			return err
 		}); err == io.EOF {

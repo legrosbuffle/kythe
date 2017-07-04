@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "google/protobuf/io/zero_copy_stream.h"
 #include "kythe/proto/analysis.pb.h"
@@ -150,7 +151,7 @@ class IndexPackPosixFilesystem : public IndexPackFilesystem {
   /// \param open_mode Mount as read-only or read/write?
   IndexPackPosixFilesystem(std::string root_directory,
                            IndexPackFilesystem::OpenMode open_mode)
-      : root_directory_(root_directory), open_mode_(open_mode) {}
+      : root_directory_(std::move(root_directory)), open_mode_(open_mode) {}
 
   /// \brief Returns the absolute path to the directory for storing data.
   const std::string &directory_for(DataKind data_kind) const {
@@ -246,6 +247,6 @@ class IndexPack {
   /// The view of the filesystem for this IndexPack.
   std::unique_ptr<IndexPackFilesystem> filesystem_;
 };
-}
+}  // namespace kythe
 
 #endif  // KYTHE_CXX_COMMON_INDEX_PACK_H_

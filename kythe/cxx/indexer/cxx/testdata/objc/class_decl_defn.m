@@ -3,7 +3,7 @@
 //- @Box defines/binding BoxIface
 //- BoxIface.node/kind record
 //- BoxIface.subkind class
-//- BoxIface.complete incomplete
+//- BoxIface.complete complete
 @interface Box
 @end
 
@@ -14,9 +14,6 @@
 //- @Box completes/uniquely BoxIface
 @implementation Box
 @end
-
-//- BoxIface named BoxName
-//- BoxImpl named BoxName
 
 int main(int argc, char **argv) {
   return 0;

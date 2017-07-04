@@ -20,8 +20,9 @@ external_go_package(
 external_go_package(
     name = "go/gcimporter15",
     base_pkg = "golang.org/x/tools",
-    exclude_srcs = [
-        "setname16.go",
-        "gcimporter16_test.go",
-    ],
+)
+
+external_go_package(
+    name = "go/types/typeutil",
+    base_pkg = "golang.org/x/tools",
 )

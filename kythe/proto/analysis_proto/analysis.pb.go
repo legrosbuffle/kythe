@@ -11,6 +11,7 @@
 	It has these top-level messages:
 		AnalysisRequest
 		AnalysisOutput
+		AnalysisResult
 		CompilationUnit
 		FilesRequest
 		FileInfo
@@ -35,7 +36,35 @@ var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
-const _ = proto.ProtoPackageIsVersion1
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
+
+type AnalysisResult_Status int32
+
+const (
+	AnalysisResult_COMPLETE        AnalysisResult_Status = 0
+	AnalysisResult_INCOMPLETE      AnalysisResult_Status = 1
+	AnalysisResult_INVALID_REQUEST AnalysisResult_Status = 2
+)
+
+var AnalysisResult_Status_name = map[int32]string{
+	0: "COMPLETE",
+	1: "INCOMPLETE",
+	2: "INVALID_REQUEST",
+}
+var AnalysisResult_Status_value = map[string]int32{
+	"COMPLETE":        0,
+	"INCOMPLETE":      1,
+	"INVALID_REQUEST": 2,
+}
+
+func (x AnalysisResult_Status) String() string {
+	return proto.EnumName(AnalysisResult_Status_name, int32(x))
+}
+func (AnalysisResult_Status) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorAnalysis, []int{2, 0}
+}
 
 // An AnalysisRequest instructs an analyzer to perform an analysis on a single
 // CompilationUnit.
@@ -46,6 +75,8 @@ type AnalysisRequest struct {
 	// be used in preference to any other file data service the analyzer may know
 	// about for this compilation.
 	FileDataService string `protobuf:"bytes,2,opt,name=file_data_service,json=fileDataService,proto3" json:"file_data_service,omitempty"`
+	// The revision marker that should be attributed to this compilation.
+	Revision string `protobuf:"bytes,3,opt,name=revision,proto3" json:"revision,omitempty"`
 }
 
 func (m *AnalysisRequest) Reset()                    { *m = AnalysisRequest{} }
@@ -60,6 +91,20 @@ func (m *AnalysisRequest) GetCompilation() *CompilationUnit {
 	return nil
 }
 
+func (m *AnalysisRequest) GetFileDataService() string {
+	if m != nil {
+		return m.FileDataService
+	}
+	return ""
+}
+
+func (m *AnalysisRequest) GetRevision() string {
+	if m != nil {
+		return m.Revision
+	}
+	return ""
+}
+
 // AnalysisOutput contains an output artifact for the current analysis taking
 // place.  A given analysis may not produce any outputs.  It is okay for an
 // indexer to send an empty AnalysisOutput message if needed to keep the RPC
@@ -69,6 +114,16 @@ func (m *AnalysisRequest) GetCompilation() *CompilationUnit {
 // emit wire-format kythe.proto.Entry messages.
 type AnalysisOutput struct {
 	Value []byte `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	// An analyzer may optionally report the final result of analysis by
+	// populating this field in the last output it emits.
+	//
+	// Constraints: If final_result is set, value must be unset, and once a
+	// final_result has been sent no further outputs may be sent. The driver must
+	// enforce these constraints by aborting and discarding the request if the
+	// analyzer sends additional data after the final_result. It is legal for the
+	// analyzer to omit any final_result, in which case the driver will assume
+	// that the analysis was completed successfully.
+	FinalResult *AnalysisResult `protobuf:"bytes,10,opt,name=final_result,json=finalResult" json:"final_result,omitempty"`
 }
 
 func (m *AnalysisOutput) Reset()                    { *m = AnalysisOutput{} }
@@ -76,14 +131,51 @@ func (m *AnalysisOutput) String() string            { return proto.CompactTextSt
 func (*AnalysisOutput) ProtoMessage()               {}
 func (*AnalysisOutput) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{1} }
 
+func (m *AnalysisOutput) GetValue() []byte {
+	if m != nil {
+		return m.Value
+	}
+	return nil
+}
+
+func (m *AnalysisOutput) GetFinalResult() *AnalysisResult {
+	if m != nil {
+		return m.FinalResult
+	}
+	return nil
+}
+
+// AnalysisResult documents the analyzer's opinion of an analysis request.
+type AnalysisResult struct {
+	Status  AnalysisResult_Status `protobuf:"varint,1,opt,name=status,proto3,enum=kythe.proto.AnalysisResult_Status" json:"status,omitempty"`
+	Summary string                `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+}
+
+func (m *AnalysisResult) Reset()                    { *m = AnalysisResult{} }
+func (m *AnalysisResult) String() string            { return proto.CompactTextString(m) }
+func (*AnalysisResult) ProtoMessage()               {}
+func (*AnalysisResult) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{2} }
+
+func (m *AnalysisResult) GetStatus() AnalysisResult_Status {
+	if m != nil {
+		return m.Status
+	}
+	return AnalysisResult_COMPLETE
+}
+
+func (m *AnalysisResult) GetSummary() string {
+	if m != nil {
+		return m.Summary
+	}
+	return ""
+}
+
 // Describes a single unit of compilation.
 type CompilationUnit struct {
 	// The base VName for the compilation and any generated VNames from its
 	// analysis. Generally, the `language` component designates the language of
 	// the compilation's sources.
 	VName *kythe_proto1.VName `protobuf:"bytes,1,opt,name=v_name,json=vName" json:"v_name,omitempty"`
-	// The revision of the compilation.
-	Revision string `protobuf:"bytes,2,opt,name=revision,proto3" json:"revision,omitempty"`
 	// All files that might be touched in the course of this compilation.
 	// Consumers of the CompilationUnit may not assume anything about the order
 	// of the elements of this field.
@@ -128,7 +220,7 @@ type CompilationUnit struct {
 func (m *CompilationUnit) Reset()                    { *m = CompilationUnit{} }
 func (m *CompilationUnit) String() string            { return proto.CompactTextString(m) }
 func (*CompilationUnit) ProtoMessage()               {}
-func (*CompilationUnit) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{2} }
+func (*CompilationUnit) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{3} }
 
 func (m *CompilationUnit) GetVName() *kythe_proto1.VName {
 	if m != nil {
@@ -142,6 +234,48 @@ func (m *CompilationUnit) GetRequiredInput() []*CompilationUnit_FileInput {
 		return m.RequiredInput
 	}
 	return nil
+}
+
+func (m *CompilationUnit) GetHasCompileErrors() bool {
+	if m != nil {
+		return m.HasCompileErrors
+	}
+	return false
+}
+
+func (m *CompilationUnit) GetArgument() []string {
+	if m != nil {
+		return m.Argument
+	}
+	return nil
+}
+
+func (m *CompilationUnit) GetSourceFile() []string {
+	if m != nil {
+		return m.SourceFile
+	}
+	return nil
+}
+
+func (m *CompilationUnit) GetOutputKey() string {
+	if m != nil {
+		return m.OutputKey
+	}
+	return ""
+}
+
+func (m *CompilationUnit) GetWorkingDirectory() string {
+	if m != nil {
+		return m.WorkingDirectory
+	}
+	return ""
+}
+
+func (m *CompilationUnit) GetEntryContext() string {
+	if m != nil {
+		return m.EntryContext
+	}
+	return ""
 }
 
 func (m *CompilationUnit) GetEnvironment() []*CompilationUnit_Env {
@@ -173,7 +307,7 @@ func (m *CompilationUnit_FileInput) Reset()         { *m = CompilationUnit_FileI
 func (m *CompilationUnit_FileInput) String() string { return proto.CompactTextString(m) }
 func (*CompilationUnit_FileInput) ProtoMessage()    {}
 func (*CompilationUnit_FileInput) Descriptor() ([]byte, []int) {
-	return fileDescriptorAnalysis, []int{2, 0}
+	return fileDescriptorAnalysis, []int{3, 0}
 }
 
 func (m *CompilationUnit_FileInput) GetVName() *kythe_proto1.VName {
@@ -207,7 +341,21 @@ type CompilationUnit_Env struct {
 func (m *CompilationUnit_Env) Reset()                    { *m = CompilationUnit_Env{} }
 func (m *CompilationUnit_Env) String() string            { return proto.CompactTextString(m) }
 func (*CompilationUnit_Env) ProtoMessage()               {}
-func (*CompilationUnit_Env) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{2, 1} }
+func (*CompilationUnit_Env) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{3, 1} }
+
+func (m *CompilationUnit_Env) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *CompilationUnit_Env) GetValue() string {
+	if m != nil {
+		return m.Value
+	}
+	return ""
+}
 
 // A FilesRequest specifies a collection of files to be fetched from a
 // FileDataService.
@@ -218,7 +366,7 @@ type FilesRequest struct {
 func (m *FilesRequest) Reset()                    { *m = FilesRequest{} }
 func (m *FilesRequest) String() string            { return proto.CompactTextString(m) }
 func (*FilesRequest) ProtoMessage()               {}
-func (*FilesRequest) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{3} }
+func (*FilesRequest) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{4} }
 
 func (m *FilesRequest) GetFiles() []*FileInfo {
 	if m != nil {
@@ -243,7 +391,21 @@ type FileInfo struct {
 func (m *FileInfo) Reset()                    { *m = FileInfo{} }
 func (m *FileInfo) String() string            { return proto.CompactTextString(m) }
 func (*FileInfo) ProtoMessage()               {}
-func (*FileInfo) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{4} }
+func (*FileInfo) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{5} }
+
+func (m *FileInfo) GetPath() string {
+	if m != nil {
+		return m.Path
+	}
+	return ""
+}
+
+func (m *FileInfo) GetDigest() string {
+	if m != nil {
+		return m.Digest
+	}
+	return ""
+}
 
 // A FileData carries the content of a single file, as returned from the Get
 // method of a FileDataService.
@@ -266,13 +428,27 @@ type FileData struct {
 func (m *FileData) Reset()                    { *m = FileData{} }
 func (m *FileData) String() string            { return proto.CompactTextString(m) }
 func (*FileData) ProtoMessage()               {}
-func (*FileData) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{5} }
+func (*FileData) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{6} }
+
+func (m *FileData) GetContent() []byte {
+	if m != nil {
+		return m.Content
+	}
+	return nil
+}
 
 func (m *FileData) GetInfo() *FileInfo {
 	if m != nil {
 		return m.Info
 	}
 	return nil
+}
+
+func (m *FileData) GetMissing() bool {
+	if m != nil {
+		return m.Missing
+	}
+	return false
 }
 
 // A CompilationBundle carries a CompilationUnit and its required FileData.
@@ -286,7 +462,7 @@ type CompilationBundle struct {
 func (m *CompilationBundle) Reset()                    { *m = CompilationBundle{} }
 func (m *CompilationBundle) String() string            { return proto.CompactTextString(m) }
 func (*CompilationBundle) ProtoMessage()               {}
-func (*CompilationBundle) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{6} }
+func (*CompilationBundle) Descriptor() ([]byte, []int) { return fileDescriptorAnalysis, []int{7} }
 
 func (m *CompilationBundle) GetUnit() *CompilationUnit {
 	if m != nil {
@@ -305,6 +481,7 @@ func (m *CompilationBundle) GetFiles() []*FileData {
 func init() {
 	proto.RegisterType((*AnalysisRequest)(nil), "kythe.proto.AnalysisRequest")
 	proto.RegisterType((*AnalysisOutput)(nil), "kythe.proto.AnalysisOutput")
+	proto.RegisterType((*AnalysisResult)(nil), "kythe.proto.AnalysisResult")
 	proto.RegisterType((*CompilationUnit)(nil), "kythe.proto.CompilationUnit")
 	proto.RegisterType((*CompilationUnit_FileInput)(nil), "kythe.proto.CompilationUnit.FileInput")
 	proto.RegisterType((*CompilationUnit_Env)(nil), "kythe.proto.CompilationUnit.Env")
@@ -312,102 +489,142 @@ func init() {
 	proto.RegisterType((*FileInfo)(nil), "kythe.proto.FileInfo")
 	proto.RegisterType((*FileData)(nil), "kythe.proto.FileData")
 	proto.RegisterType((*CompilationBundle)(nil), "kythe.proto.CompilationBundle")
+	proto.RegisterEnum("kythe.proto.AnalysisResult_Status", AnalysisResult_Status_name, AnalysisResult_Status_value)
 }
-func (m *AnalysisRequest) Marshal() (data []byte, err error) {
+func (m *AnalysisRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *AnalysisRequest) MarshalTo(data []byte) (int, error) {
+func (m *AnalysisRequest) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Compilation != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(m.Compilation.Size()))
-		n1, err := m.Compilation.MarshalTo(data[i:])
+		i = encodeVarintAnalysis(dAtA, i, uint64(m.Compilation.Size()))
+		n1, err := m.Compilation.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n1
 	}
 	if len(m.FileDataService) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(len(m.FileDataService)))
-		i += copy(data[i:], m.FileDataService)
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.FileDataService)))
+		i += copy(dAtA[i:], m.FileDataService)
+	}
+	if len(m.Revision) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.Revision)))
+		i += copy(dAtA[i:], m.Revision)
 	}
 	return i, nil
 }
 
-func (m *AnalysisOutput) Marshal() (data []byte, err error) {
+func (m *AnalysisOutput) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *AnalysisOutput) MarshalTo(data []byte) (int, error) {
+func (m *AnalysisOutput) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Value) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(len(m.Value)))
-		i += copy(data[i:], m.Value)
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.Value)))
+		i += copy(dAtA[i:], m.Value)
 	}
-	return i, nil
-}
-
-func (m *CompilationUnit) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *CompilationUnit) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.VName != nil {
-		data[i] = 0xa
+	if m.FinalResult != nil {
+		dAtA[i] = 0x52
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(m.VName.Size()))
-		n2, err := m.VName.MarshalTo(data[i:])
+		i = encodeVarintAnalysis(dAtA, i, uint64(m.FinalResult.Size()))
+		n2, err := m.FinalResult.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n2
 	}
-	if len(m.Revision) > 0 {
-		data[i] = 0x12
+	return i, nil
+}
+
+func (m *AnalysisResult) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AnalysisResult) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Status != 0 {
+		dAtA[i] = 0x8
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(len(m.Revision)))
-		i += copy(data[i:], m.Revision)
+		i = encodeVarintAnalysis(dAtA, i, uint64(m.Status))
+	}
+	if len(m.Summary) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.Summary)))
+		i += copy(dAtA[i:], m.Summary)
+	}
+	return i, nil
+}
+
+func (m *CompilationUnit) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CompilationUnit) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.VName != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAnalysis(dAtA, i, uint64(m.VName.Size()))
+		n3, err := m.VName.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
 	}
 	if len(m.RequiredInput) > 0 {
 		for _, msg := range m.RequiredInput {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintAnalysis(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintAnalysis(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -415,69 +632,69 @@ func (m *CompilationUnit) MarshalTo(data []byte) (int, error) {
 		}
 	}
 	if m.HasCompileErrors {
-		data[i] = 0x20
+		dAtA[i] = 0x20
 		i++
 		if m.HasCompileErrors {
-			data[i] = 1
+			dAtA[i] = 1
 		} else {
-			data[i] = 0
+			dAtA[i] = 0
 		}
 		i++
 	}
 	if len(m.Argument) > 0 {
 		for _, s := range m.Argument {
-			data[i] = 0x2a
+			dAtA[i] = 0x2a
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	if len(m.SourceFile) > 0 {
 		for _, s := range m.SourceFile {
-			data[i] = 0x32
+			dAtA[i] = 0x32
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	if len(m.OutputKey) > 0 {
-		data[i] = 0x3a
+		dAtA[i] = 0x3a
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(len(m.OutputKey)))
-		i += copy(data[i:], m.OutputKey)
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.OutputKey)))
+		i += copy(dAtA[i:], m.OutputKey)
 	}
 	if len(m.WorkingDirectory) > 0 {
-		data[i] = 0x42
+		dAtA[i] = 0x42
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(len(m.WorkingDirectory)))
-		i += copy(data[i:], m.WorkingDirectory)
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.WorkingDirectory)))
+		i += copy(dAtA[i:], m.WorkingDirectory)
 	}
 	if len(m.EntryContext) > 0 {
-		data[i] = 0x4a
+		dAtA[i] = 0x4a
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(len(m.EntryContext)))
-		i += copy(data[i:], m.EntryContext)
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.EntryContext)))
+		i += copy(dAtA[i:], m.EntryContext)
 	}
 	if len(m.Environment) > 0 {
 		for _, msg := range m.Environment {
-			data[i] = 0x52
+			dAtA[i] = 0x52
 			i++
-			i = encodeVarintAnalysis(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintAnalysis(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -486,10 +703,10 @@ func (m *CompilationUnit) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.Details) > 0 {
 		for _, msg := range m.Details {
-			data[i] = 0x5a
+			dAtA[i] = 0x5a
 			i++
-			i = encodeVarintAnalysis(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintAnalysis(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -499,219 +716,105 @@ func (m *CompilationUnit) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *CompilationUnit_FileInput) Marshal() (data []byte, err error) {
+func (m *CompilationUnit_FileInput) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *CompilationUnit_FileInput) MarshalTo(data []byte) (int, error) {
+func (m *CompilationUnit_FileInput) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.VName != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(m.VName.Size()))
-		n3, err := m.VName.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
-	}
-	if m.Info != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintAnalysis(data, i, uint64(m.Info.Size()))
-		n4, err := m.Info.MarshalTo(data[i:])
+		i = encodeVarintAnalysis(dAtA, i, uint64(m.VName.Size()))
+		n4, err := m.VName.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n4
 	}
-	if m.Context != nil {
-		data[i] = 0x1a
+	if m.Info != nil {
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(m.Context.Size()))
-		n5, err := m.Context.MarshalTo(data[i:])
+		i = encodeVarintAnalysis(dAtA, i, uint64(m.Info.Size()))
+		n5, err := m.Info.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n5
 	}
-	return i, nil
-}
-
-func (m *CompilationUnit_Env) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *CompilationUnit_Env) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Name) > 0 {
-		data[i] = 0xa
+	if m.Context != nil {
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(len(m.Name)))
-		i += copy(data[i:], m.Name)
-	}
-	if len(m.Value) > 0 {
-		data[i] = 0x12
-		i++
-		i = encodeVarintAnalysis(data, i, uint64(len(m.Value)))
-		i += copy(data[i:], m.Value)
-	}
-	return i, nil
-}
-
-func (m *FilesRequest) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *FilesRequest) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Files) > 0 {
-		for _, msg := range m.Files {
-			data[i] = 0xa
-			i++
-			i = encodeVarintAnalysis(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func (m *FileInfo) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *FileInfo) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Path) > 0 {
-		data[i] = 0xa
-		i++
-		i = encodeVarintAnalysis(data, i, uint64(len(m.Path)))
-		i += copy(data[i:], m.Path)
-	}
-	if len(m.Digest) > 0 {
-		data[i] = 0x12
-		i++
-		i = encodeVarintAnalysis(data, i, uint64(len(m.Digest)))
-		i += copy(data[i:], m.Digest)
-	}
-	return i, nil
-}
-
-func (m *FileData) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *FileData) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Content) > 0 {
-		data[i] = 0xa
-		i++
-		i = encodeVarintAnalysis(data, i, uint64(len(m.Content)))
-		i += copy(data[i:], m.Content)
-	}
-	if m.Info != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintAnalysis(data, i, uint64(m.Info.Size()))
-		n6, err := m.Info.MarshalTo(data[i:])
+		i = encodeVarintAnalysis(dAtA, i, uint64(m.Context.Size()))
+		n6, err := m.Context.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n6
 	}
-	if m.Missing {
-		data[i] = 0x18
-		i++
-		if m.Missing {
-			data[i] = 1
-		} else {
-			data[i] = 0
-		}
-		i++
-	}
 	return i, nil
 }
 
-func (m *CompilationBundle) Marshal() (data []byte, err error) {
+func (m *CompilationUnit_Env) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *CompilationBundle) MarshalTo(data []byte) (int, error) {
+func (m *CompilationUnit_Env) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	if m.Unit != nil {
-		data[i] = 0xa
+	if len(m.Name) > 0 {
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintAnalysis(data, i, uint64(m.Unit.Size()))
-		n7, err := m.Unit.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n7
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.Name)))
+		i += copy(dAtA[i:], m.Name)
 	}
+	if len(m.Value) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.Value)))
+		i += copy(dAtA[i:], m.Value)
+	}
+	return i, nil
+}
+
+func (m *FilesRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *FilesRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
 	if len(m.Files) > 0 {
 		for _, msg := range m.Files {
-			data[i] = 0x12
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintAnalysis(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintAnalysis(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -721,31 +824,145 @@ func (m *CompilationBundle) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func encodeFixed64Analysis(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func (m *FileInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *FileInfo) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Path) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.Path)))
+		i += copy(dAtA[i:], m.Path)
+	}
+	if len(m.Digest) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.Digest)))
+		i += copy(dAtA[i:], m.Digest)
+	}
+	return i, nil
+}
+
+func (m *FileData) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *FileData) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Content) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAnalysis(dAtA, i, uint64(len(m.Content)))
+		i += copy(dAtA[i:], m.Content)
+	}
+	if m.Info != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintAnalysis(dAtA, i, uint64(m.Info.Size()))
+		n7, err := m.Info.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n7
+	}
+	if m.Missing {
+		dAtA[i] = 0x18
+		i++
+		if m.Missing {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
+	}
+	return i, nil
+}
+
+func (m *CompilationBundle) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CompilationBundle) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Unit != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAnalysis(dAtA, i, uint64(m.Unit.Size()))
+		n8, err := m.Unit.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n8
+	}
+	if len(m.Files) > 0 {
+		for _, msg := range m.Files {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintAnalysis(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func encodeFixed64Analysis(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Analysis(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Analysis(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintAnalysis(data []byte, offset int, v uint64) int {
+func encodeVarintAnalysis(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *AnalysisRequest) Size() (n int) {
@@ -759,6 +976,10 @@ func (m *AnalysisRequest) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovAnalysis(uint64(l))
 	}
+	l = len(m.Revision)
+	if l > 0 {
+		n += 1 + l + sovAnalysis(uint64(l))
+	}
 	return n
 }
 
@@ -766,6 +987,23 @@ func (m *AnalysisOutput) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Value)
+	if l > 0 {
+		n += 1 + l + sovAnalysis(uint64(l))
+	}
+	if m.FinalResult != nil {
+		l = m.FinalResult.Size()
+		n += 1 + l + sovAnalysis(uint64(l))
+	}
+	return n
+}
+
+func (m *AnalysisResult) Size() (n int) {
+	var l int
+	_ = l
+	if m.Status != 0 {
+		n += 1 + sovAnalysis(uint64(m.Status))
+	}
+	l = len(m.Summary)
 	if l > 0 {
 		n += 1 + l + sovAnalysis(uint64(l))
 	}
@@ -777,10 +1015,6 @@ func (m *CompilationUnit) Size() (n int) {
 	_ = l
 	if m.VName != nil {
 		l = m.VName.Size()
-		n += 1 + l + sovAnalysis(uint64(l))
-	}
-	l = len(m.Revision)
-	if l > 0 {
 		n += 1 + l + sovAnalysis(uint64(l))
 	}
 	if len(m.RequiredInput) > 0 {
@@ -935,8 +1169,8 @@ func sovAnalysis(x uint64) (n int) {
 func sozAnalysis(x uint64) (n int) {
 	return sovAnalysis(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *AnalysisRequest) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *AnalysisRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -948,7 +1182,7 @@ func (m *AnalysisRequest) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -976,7 +1210,7 @@ func (m *AnalysisRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -993,7 +1227,7 @@ func (m *AnalysisRequest) Unmarshal(data []byte) error {
 			if m.Compilation == nil {
 				m.Compilation = &CompilationUnit{}
 			}
-			if err := m.Compilation.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Compilation.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1009,7 +1243,7 @@ func (m *AnalysisRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1024,11 +1258,40 @@ func (m *AnalysisRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.FileDataService = string(data[iNdEx:postIndex])
+			m.FileDataService = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Revision", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAnalysis
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAnalysis
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Revision = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipAnalysis(data[iNdEx:])
+			skippy, err := skipAnalysis(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1047,8 +1310,8 @@ func (m *AnalysisRequest) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *AnalysisOutput) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *AnalysisOutput) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1060,7 +1323,7 @@ func (m *AnalysisOutput) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1088,7 +1351,7 @@ func (m *AnalysisOutput) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1102,14 +1365,47 @@ func (m *AnalysisOutput) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Value = append(m.Value[:0], data[iNdEx:postIndex]...)
+			m.Value = append(m.Value[:0], dAtA[iNdEx:postIndex]...)
 			if m.Value == nil {
 				m.Value = []byte{}
 			}
 			iNdEx = postIndex
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FinalResult", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAnalysis
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAnalysis
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.FinalResult == nil {
+				m.FinalResult = &AnalysisResult{}
+			}
+			if err := m.FinalResult.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipAnalysis(data[iNdEx:])
+			skippy, err := skipAnalysis(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1128,8 +1424,8 @@ func (m *AnalysisOutput) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CompilationUnit) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *AnalysisResult) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1141,7 +1437,105 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AnalysisResult: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AnalysisResult: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			m.Status = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAnalysis
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Status |= (AnalysisResult_Status(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Summary", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAnalysis
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAnalysis
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Summary = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAnalysis(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAnalysis
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CompilationUnit) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAnalysis
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1169,7 +1563,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1186,38 +1580,9 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 			if m.VName == nil {
 				m.VName = &kythe_proto1.VName{}
 			}
-			if err := m.VName.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.VName.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Revision", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowAnalysis
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthAnalysis
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Revision = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -1231,7 +1596,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1246,7 +1611,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.RequiredInput = append(m.RequiredInput, &CompilationUnit_FileInput{})
-			if err := m.RequiredInput[len(m.RequiredInput)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.RequiredInput[len(m.RequiredInput)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1262,7 +1627,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1282,7 +1647,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1297,7 +1662,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Argument = append(m.Argument, string(data[iNdEx:postIndex]))
+			m.Argument = append(m.Argument, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 6:
 			if wireType != 2 {
@@ -1311,7 +1676,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1326,7 +1691,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.SourceFile = append(m.SourceFile, string(data[iNdEx:postIndex]))
+			m.SourceFile = append(m.SourceFile, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 7:
 			if wireType != 2 {
@@ -1340,7 +1705,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1355,7 +1720,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.OutputKey = string(data[iNdEx:postIndex])
+			m.OutputKey = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 8:
 			if wireType != 2 {
@@ -1369,7 +1734,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1384,7 +1749,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.WorkingDirectory = string(data[iNdEx:postIndex])
+			m.WorkingDirectory = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 9:
 			if wireType != 2 {
@@ -1398,7 +1763,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1413,7 +1778,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.EntryContext = string(data[iNdEx:postIndex])
+			m.EntryContext = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 10:
 			if wireType != 2 {
@@ -1427,7 +1792,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1442,7 +1807,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Environment = append(m.Environment, &CompilationUnit_Env{})
-			if err := m.Environment[len(m.Environment)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Environment[len(m.Environment)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1458,7 +1823,7 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1473,13 +1838,13 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Details = append(m.Details, &google_protobuf.Any{})
-			if err := m.Details[len(m.Details)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Details[len(m.Details)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipAnalysis(data[iNdEx:])
+			skippy, err := skipAnalysis(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1498,8 +1863,8 @@ func (m *CompilationUnit) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CompilationUnit_FileInput) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *CompilationUnit_FileInput) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1511,7 +1876,7 @@ func (m *CompilationUnit_FileInput) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1539,7 +1904,7 @@ func (m *CompilationUnit_FileInput) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1556,7 +1921,7 @@ func (m *CompilationUnit_FileInput) Unmarshal(data []byte) error {
 			if m.VName == nil {
 				m.VName = &kythe_proto1.VName{}
 			}
-			if err := m.VName.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.VName.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1572,7 +1937,7 @@ func (m *CompilationUnit_FileInput) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1589,7 +1954,7 @@ func (m *CompilationUnit_FileInput) Unmarshal(data []byte) error {
 			if m.Info == nil {
 				m.Info = &FileInfo{}
 			}
-			if err := m.Info.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1605,7 +1970,7 @@ func (m *CompilationUnit_FileInput) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1622,13 +1987,13 @@ func (m *CompilationUnit_FileInput) Unmarshal(data []byte) error {
 			if m.Context == nil {
 				m.Context = &kythe_proto.ContextDependentVersion{}
 			}
-			if err := m.Context.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Context.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipAnalysis(data[iNdEx:])
+			skippy, err := skipAnalysis(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1647,8 +2012,8 @@ func (m *CompilationUnit_FileInput) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CompilationUnit_Env) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *CompilationUnit_Env) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1660,7 +2025,7 @@ func (m *CompilationUnit_Env) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1688,7 +2053,7 @@ func (m *CompilationUnit_Env) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1703,7 +2068,7 @@ func (m *CompilationUnit_Env) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -1717,7 +2082,7 @@ func (m *CompilationUnit_Env) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1732,11 +2097,11 @@ func (m *CompilationUnit_Env) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Value = string(data[iNdEx:postIndex])
+			m.Value = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipAnalysis(data[iNdEx:])
+			skippy, err := skipAnalysis(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1755,8 +2120,8 @@ func (m *CompilationUnit_Env) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *FilesRequest) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *FilesRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1768,7 +2133,7 @@ func (m *FilesRequest) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1796,7 +2161,7 @@ func (m *FilesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1811,13 +2176,13 @@ func (m *FilesRequest) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Files = append(m.Files, &FileInfo{})
-			if err := m.Files[len(m.Files)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Files[len(m.Files)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipAnalysis(data[iNdEx:])
+			skippy, err := skipAnalysis(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1836,8 +2201,8 @@ func (m *FilesRequest) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *FileInfo) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *FileInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1849,7 +2214,7 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1877,7 +2242,7 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1892,7 +2257,7 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Path = string(data[iNdEx:postIndex])
+			m.Path = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -1906,7 +2271,7 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1921,11 +2286,11 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Digest = string(data[iNdEx:postIndex])
+			m.Digest = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipAnalysis(data[iNdEx:])
+			skippy, err := skipAnalysis(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1944,8 +2309,8 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *FileData) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *FileData) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1957,7 +2322,7 @@ func (m *FileData) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1985,7 +2350,7 @@ func (m *FileData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1999,7 +2364,7 @@ func (m *FileData) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Content = append(m.Content[:0], data[iNdEx:postIndex]...)
+			m.Content = append(m.Content[:0], dAtA[iNdEx:postIndex]...)
 			if m.Content == nil {
 				m.Content = []byte{}
 			}
@@ -2016,7 +2381,7 @@ func (m *FileData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2033,7 +2398,7 @@ func (m *FileData) Unmarshal(data []byte) error {
 			if m.Info == nil {
 				m.Info = &FileInfo{}
 			}
-			if err := m.Info.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2049,7 +2414,7 @@ func (m *FileData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2059,7 +2424,7 @@ func (m *FileData) Unmarshal(data []byte) error {
 			m.Missing = bool(v != 0)
 		default:
 			iNdEx = preIndex
-			skippy, err := skipAnalysis(data[iNdEx:])
+			skippy, err := skipAnalysis(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2078,8 +2443,8 @@ func (m *FileData) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CompilationBundle) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *CompilationBundle) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2091,7 +2456,7 @@ func (m *CompilationBundle) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2119,7 +2484,7 @@ func (m *CompilationBundle) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2136,7 +2501,7 @@ func (m *CompilationBundle) Unmarshal(data []byte) error {
 			if m.Unit == nil {
 				m.Unit = &CompilationUnit{}
 			}
-			if err := m.Unit.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Unit.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2152,7 +2517,7 @@ func (m *CompilationBundle) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2167,13 +2532,13 @@ func (m *CompilationBundle) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Files = append(m.Files, &FileData{})
-			if err := m.Files[len(m.Files)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Files[len(m.Files)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipAnalysis(data[iNdEx:])
+			skippy, err := skipAnalysis(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2192,8 +2557,8 @@ func (m *CompilationBundle) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipAnalysis(data []byte) (n int, err error) {
-	l := len(data)
+func skipAnalysis(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -2204,7 +2569,7 @@ func skipAnalysis(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2222,7 +2587,7 @@ func skipAnalysis(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -2239,7 +2604,7 @@ func skipAnalysis(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2262,7 +2627,7 @@ func skipAnalysis(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -2273,7 +2638,7 @@ func skipAnalysis(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipAnalysis(data[start:])
+				next, err := skipAnalysis(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}
@@ -2297,50 +2662,59 @@ var (
 	ErrIntOverflowAnalysis   = fmt.Errorf("proto: integer overflow")
 )
 
+func init() { proto.RegisterFile("kythe/proto/analysis.proto", fileDescriptorAnalysis) }
+
 var fileDescriptorAnalysis = []byte{
-	// 693 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x94, 0x54, 0xcd, 0x6e, 0xdb, 0x38,
-	0x10, 0x5e, 0xc5, 0xff, 0xa3, 0xfc, 0x12, 0xd9, 0x85, 0xd6, 0xd8, 0x38, 0x86, 0x77, 0x11, 0x38,
-	0x9b, 0x85, 0xbc, 0x48, 0x8b, 0x5e, 0x0a, 0x04, 0xc8, 0x5f, 0x81, 0xa2, 0x68, 0x0b, 0xa8, 0x68,
-	0xae, 0x02, 0x63, 0x8d, 0x6d, 0x22, 0x32, 0xe9, 0x90, 0x94, 0x5a, 0x1d, 0xfa, 0x1e, 0xbd, 0xf6,
-	0x6d, 0x7a, 0xe8, 0xa1, 0x8f, 0x50, 0xa4, 0x2f, 0xd1, 0x63, 0x41, 0x4a, 0x72, 0x9c, 0x00, 0x09,
-	0x9a, 0x93, 0x38, 0x33, 0xdf, 0xcc, 0x7c, 0xf3, 0x71, 0x28, 0x68, 0x5f, 0x64, 0x7a, 0x82, 0x83,
-	0x99, 0x14, 0x5a, 0x0c, 0x28, 0xa7, 0x71, 0xa6, 0x98, 0xf2, 0xad, 0x49, 0x5c, 0x1b, 0xcb, 0x8d,
-	0xf6, 0x9f, 0x63, 0x21, 0xc6, 0x71, 0x81, 0x3c, 0x4f, 0x46, 0x03, 0xca, 0xb3, 0x22, 0xb4, 0xb5,
-	0x58, 0x63, 0xc4, 0x62, 0x1c, 0x0a, 0xae, 0xf1, 0xbd, 0x2e, 0x33, 0x17, 0xc3, 0x4a, 0x0b, 0x49,
-	0xc7, 0x45, 0xd1, 0xde, 0x07, 0x58, 0x3b, 0x2c, 0x7a, 0x06, 0x78, 0x99, 0xa0, 0xd2, 0xe4, 0x00,
-	0xdc, 0xa1, 0x98, 0xce, 0x58, 0x4c, 0x35, 0x13, 0xdc, 0x73, 0xba, 0x4e, 0xdf, 0xdd, 0xff, 0xcb,
-	0x5f, 0xa0, 0xe2, 0x1f, 0x5f, 0xc7, 0xdf, 0x72, 0xa6, 0x83, 0xc5, 0x04, 0xf2, 0x2f, 0x6c, 0x18,
-	0x0a, 0x61, 0x44, 0x35, 0x0d, 0x15, 0xca, 0x94, 0x0d, 0xd1, 0x5b, 0xea, 0x3a, 0xfd, 0x56, 0xb0,
-	0x66, 0x02, 0x27, 0x54, 0xd3, 0x37, 0xb9, 0xbb, 0xb7, 0x03, 0xab, 0x65, 0xfb, 0xd7, 0x89, 0x9e,
-	0x25, 0x9a, 0x6c, 0x42, 0x2d, 0xa5, 0x71, 0x82, 0xb6, 0xef, 0x72, 0x90, 0x1b, 0xbd, 0x2f, 0x35,
-	0x58, 0xbb, 0xd5, 0x94, 0xec, 0x42, 0x3d, 0x0d, 0x39, 0x9d, 0x62, 0x41, 0x91, 0xdc, 0xa0, 0x78,
-	0xf6, 0x8a, 0x4e, 0x31, 0xa8, 0xa5, 0xe6, 0x43, 0xda, 0xd0, 0x94, 0x98, 0x32, 0x65, 0xe6, 0xc9,
-	0x99, 0xcc, 0x6d, 0xf2, 0x12, 0x56, 0x25, 0x5e, 0x26, 0x4c, 0x62, 0x14, 0x32, 0x3e, 0x4b, 0xb4,
-	0x57, 0xe9, 0x56, 0xfa, 0xee, 0xfe, 0xce, 0x7d, 0x13, 0xfb, 0xcf, 0x58, 0x8c, 0xcf, 0x0d, 0x3a,
-	0x58, 0x29, 0xb3, 0xad, 0x49, 0xfe, 0x03, 0x32, 0xa1, 0x2a, 0xcc, 0x05, 0xc1, 0x10, 0xa5, 0x14,
-	0x52, 0x79, 0xd5, 0xae, 0xd3, 0x6f, 0x06, 0xeb, 0x13, 0xaa, 0xf2, 0x42, 0x78, 0x6a, 0xfd, 0x86,
-	0x18, 0x95, 0xe3, 0x64, 0x8a, 0x5c, 0x7b, 0xb5, 0x6e, 0xc5, 0x10, 0x2b, 0x6d, 0xb2, 0x0d, 0xae,
-	0x12, 0x89, 0x1c, 0x62, 0x68, 0x54, 0xf3, 0xea, 0x36, 0x0c, 0xb9, 0xcb, 0xb4, 0x27, 0x5b, 0x00,
-	0xc2, 0x8a, 0x16, 0x5e, 0x60, 0xe6, 0x35, 0xec, 0x5c, 0xad, 0xdc, 0xf3, 0x02, 0x33, 0xb2, 0x07,
-	0x1b, 0xef, 0x84, 0xbc, 0x60, 0x7c, 0x1c, 0x46, 0x4c, 0xe2, 0x50, 0x0b, 0x99, 0x79, 0x4d, 0x8b,
-	0x5a, 0x2f, 0x02, 0x27, 0xa5, 0x9f, 0xfc, 0x0d, 0x2b, 0xc8, 0xb5, 0xcc, 0xc2, 0x62, 0x73, 0xbc,
-	0x96, 0x05, 0x2e, 0x5b, 0xe7, 0x71, 0xee, 0x23, 0x47, 0xe0, 0x22, 0x4f, 0x99, 0x14, 0xdc, 0x12,
-	0x06, 0xab, 0x53, 0xf7, 0x5e, 0x9d, 0x4e, 0x79, 0x1a, 0x2c, 0x26, 0x11, 0x1f, 0x1a, 0x11, 0x6a,
-	0xca, 0x62, 0xe5, 0xb9, 0x36, 0x7f, 0xd3, 0xcf, 0xf7, 0xda, 0x2f, 0xf7, 0xda, 0x3f, 0xe4, 0x59,
-	0x50, 0x82, 0xda, 0x9f, 0x1c, 0x68, 0xcd, 0xc5, 0x7e, 0xc8, 0x9d, 0xef, 0x42, 0x95, 0xf1, 0x91,
-	0xb0, 0xf7, 0xed, 0xee, 0xff, 0x7e, 0x03, 0x98, 0x17, 0x1c, 0x89, 0xc0, 0x42, 0xc8, 0x01, 0x34,
-	0xca, 0xb1, 0x2b, 0x16, 0xfd, 0xcf, 0xad, 0x99, 0x6c, 0xec, 0x04, 0x67, 0xc8, 0x23, 0xe4, 0xfa,
-	0x0c, 0xa5, 0xd9, 0x9c, 0xa0, 0x4c, 0x6a, 0x0f, 0xa0, 0x72, 0xca, 0x53, 0x42, 0xa0, 0x3a, 0xa7,
-	0xd6, 0x0a, 0xec, 0xf9, 0x7a, 0x9d, 0xf3, 0xb5, 0x2b, 0xd6, 0xf9, 0x29, 0x2c, 0x1b, 0x0a, 0xf3,
-	0x27, 0xb7, 0x07, 0x35, 0x73, 0xc7, 0xca, 0x73, 0xac, 0x24, 0x77, 0x90, 0xcd, 0x31, 0xbd, 0x27,
-	0xd0, 0x2c, 0x5d, 0xa6, 0xe5, 0x8c, 0xea, 0x49, 0xd9, 0xd2, 0x9c, 0xc9, 0x1f, 0x50, 0x8f, 0xd8,
-	0x18, 0x95, 0x2e, 0x7a, 0x16, 0x56, 0x8f, 0xe5, 0x79, 0xe6, 0xf9, 0x11, 0xaf, 0x98, 0x98, 0xeb,
-	0xe2, 0x9d, 0x95, 0xe6, 0x43, 0x64, 0xf3, 0xa0, 0x31, 0x65, 0x4a, 0x31, 0x3e, 0xb6, 0xb2, 0x35,
-	0x83, 0xd2, 0xec, 0x49, 0xd8, 0x58, 0x58, 0x84, 0xa3, 0x84, 0x47, 0x31, 0x92, 0xff, 0xa1, 0x9a,
-	0x70, 0xa6, 0x7f, 0xe9, 0x87, 0x62, 0x91, 0xd7, 0xb2, 0x2c, 0xdd, 0x21, 0x8b, 0x99, 0xa5, 0x90,
-	0xe5, 0xe8, 0xf1, 0xe7, 0xab, 0x8e, 0xf3, 0xf5, 0xaa, 0xe3, 0x7c, 0xbb, 0xea, 0x38, 0x1f, 0xbf,
-	0x77, 0x7e, 0x83, 0xed, 0xa1, 0x98, 0x96, 0xcb, 0x15, 0x61, 0xaa, 0x85, 0x88, 0xd5, 0x62, 0x89,
-	0x1f, 0x8e, 0x73, 0x5e, 0xb7, 0xa7, 0x47, 0x3f, 0x03, 0x00, 0x00, 0xff, 0xff, 0x0d, 0x5f, 0xfb,
-	0xd6, 0x86, 0x05, 0x00, 0x00,
+	// 815 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x54, 0x5f, 0x6f, 0xdc, 0x44,
+	0x10, 0xaf, 0x73, 0xff, 0xc7, 0xd7, 0xe4, 0xb2, 0x14, 0x64, 0x0e, 0x9a, 0x9e, 0x0c, 0x42, 0x29,
+	0x45, 0x0e, 0x0a, 0x88, 0x07, 0x2a, 0x45, 0xca, 0x9f, 0x43, 0x0a, 0xb4, 0x29, 0x38, 0x6d, 0x5e,
+	0xad, 0xed, 0xdd, 0xdc, 0x65, 0x15, 0x7b, 0xf7, 0xba, 0xbb, 0x36, 0xf8, 0x9b, 0xc0, 0x23, 0xe2,
+	0x3b, 0xf0, 0x19, 0x78, 0xe4, 0x23, 0xa0, 0xf0, 0x25, 0x78, 0x44, 0xbb, 0x6b, 0xdf, 0x5d, 0x2a,
+	0x35, 0x6a, 0x9f, 0xec, 0xdf, 0xcc, 0x6f, 0x76, 0x7e, 0x33, 0xb3, 0xb3, 0x30, 0xbc, 0x2a, 0xf5,
+	0x25, 0xee, 0x2d, 0xa4, 0xd0, 0x62, 0x8f, 0x72, 0x9a, 0x96, 0x8a, 0xa9, 0xc8, 0x42, 0xe2, 0x5b,
+	0x9f, 0x03, 0xc3, 0x0f, 0xe7, 0x42, 0xcc, 0xd3, 0x8a, 0xf9, 0x32, 0x9f, 0xed, 0x51, 0x5e, 0x56,
+	0xae, 0xfb, 0xeb, 0x67, 0xcc, 0x58, 0x8a, 0x13, 0xc1, 0x35, 0xfe, 0xa2, 0xeb, 0xc8, 0x75, 0xb7,
+	0xd2, 0x42, 0xd2, 0x79, 0x75, 0x68, 0xf8, 0x9b, 0x07, 0x5b, 0x87, 0x55, 0xd2, 0x18, 0x5f, 0xe5,
+	0xa8, 0x34, 0x39, 0x00, 0x7f, 0x22, 0xb2, 0x05, 0x4b, 0xa9, 0x66, 0x82, 0x07, 0xde, 0xc8, 0xdb,
+	0xf5, 0xf7, 0x3f, 0x8e, 0xd6, 0xb4, 0x44, 0xc7, 0x2b, 0xff, 0x0b, 0xce, 0x74, 0xbc, 0x1e, 0x40,
+	0x3e, 0x87, 0x6d, 0xa3, 0x21, 0x99, 0x52, 0x4d, 0x13, 0x85, 0xb2, 0x60, 0x13, 0x0c, 0x36, 0x46,
+	0xde, 0x6e, 0x2f, 0xde, 0x32, 0x8e, 0x13, 0xaa, 0xe9, 0xb9, 0x33, 0x93, 0x21, 0x74, 0x25, 0x16,
+	0x4c, 0x99, 0x44, 0x0d, 0x4b, 0x59, 0xe2, 0x70, 0x06, 0x9b, 0xb5, 0xb4, 0x67, 0xb9, 0x5e, 0xe4,
+	0x9a, 0xdc, 0x83, 0x56, 0x41, 0xd3, 0x1c, 0xad, 0xa6, 0x7e, 0xec, 0x00, 0x39, 0x80, 0xfe, 0x8c,
+	0x71, 0x9a, 0x26, 0x12, 0x55, 0x9e, 0xea, 0x00, 0xac, 0xe0, 0x8f, 0x6e, 0x08, 0x5e, 0xd5, 0x68,
+	0x28, 0xb1, 0x6f, 0x03, 0x1c, 0x08, 0xff, 0xf0, 0x56, 0x89, 0x9c, 0x89, 0x7c, 0x0b, 0x6d, 0xa5,
+	0xa9, 0xce, 0x95, 0xcd, 0xb4, 0xb9, 0x1f, 0xde, 0x72, 0x58, 0x74, 0x6e, 0x99, 0x71, 0x15, 0x41,
+	0x02, 0xe8, 0xa8, 0x3c, 0xcb, 0xa8, 0x2c, 0xab, 0xa2, 0x6b, 0x18, 0x3e, 0x86, 0xb6, 0xe3, 0x92,
+	0x3e, 0x74, 0x8f, 0x9f, 0x3d, 0xfd, 0xf1, 0xc9, 0xf8, 0xf9, 0x78, 0x70, 0x87, 0x6c, 0x02, 0x9c,
+	0x9e, 0x2d, 0xb1, 0x47, 0xde, 0x83, 0xad, 0xd3, 0xb3, 0x8b, 0xc3, 0x27, 0xa7, 0x27, 0x49, 0x3c,
+	0xfe, 0xe9, 0xc5, 0xf8, 0xfc, 0xf9, 0x60, 0x23, 0xfc, 0xb3, 0x05, 0x5b, 0xaf, 0xb5, 0x9d, 0x3c,
+	0x84, 0x76, 0x91, 0x70, 0x9a, 0x61, 0x35, 0x24, 0x72, 0x43, 0xe6, 0xc5, 0x19, 0xcd, 0x30, 0x6e,
+	0x15, 0xe6, 0x43, 0x9e, 0xc2, 0xa6, 0xc4, 0x57, 0x39, 0x93, 0x38, 0x4d, 0x18, 0x5f, 0xe4, 0x3a,
+	0x68, 0x8c, 0x1a, 0xbb, 0xfe, 0xfe, 0x67, 0xb7, 0xcd, 0x35, 0xfa, 0x8e, 0xa5, 0x78, 0x6a, 0xd8,
+	0xf1, 0xdd, 0x3a, 0xda, 0x42, 0xf2, 0x05, 0x90, 0x4b, 0xaa, 0x12, 0x37, 0x76, 0x4c, 0x50, 0x4a,
+	0x21, 0x55, 0xd0, 0x1c, 0x79, 0xbb, 0xdd, 0x78, 0x70, 0x49, 0x95, 0x3b, 0x08, 0xc7, 0xd6, 0x6e,
+	0xa6, 0x4c, 0xe5, 0x3c, 0xcf, 0x90, 0xeb, 0xa0, 0x35, 0x6a, 0x98, 0x29, 0xd7, 0x98, 0x3c, 0x00,
+	0x5f, 0x89, 0x5c, 0x4e, 0x30, 0x31, 0x77, 0x23, 0x68, 0x5b, 0x37, 0x38, 0x93, 0x49, 0x4f, 0xee,
+	0x03, 0x08, 0x3b, 0xfe, 0xe4, 0x0a, 0xcb, 0xa0, 0x63, 0x5b, 0xda, 0x73, 0x96, 0x1f, 0xb0, 0x24,
+	0x8f, 0x60, 0xfb, 0x67, 0x21, 0xaf, 0x18, 0x9f, 0x27, 0x53, 0x26, 0x71, 0xa2, 0x85, 0x2c, 0x83,
+	0xae, 0x65, 0x0d, 0x2a, 0xc7, 0x49, 0x6d, 0x27, 0x9f, 0xc0, 0x5d, 0xe4, 0x5a, 0x96, 0x49, 0xb5,
+	0x20, 0x41, 0xcf, 0x12, 0xfb, 0xd6, 0x78, 0xec, 0x6c, 0xe4, 0x08, 0x7c, 0xe4, 0x05, 0x93, 0x82,
+	0x5b, 0xc1, 0x60, 0xfb, 0x34, 0xba, 0xb5, 0x4f, 0x63, 0x5e, 0xc4, 0xeb, 0x41, 0x24, 0x82, 0xce,
+	0x14, 0x35, 0x65, 0xa9, 0x0a, 0x7c, 0x1b, 0x7f, 0x2f, 0x72, 0xeb, 0x1b, 0xd5, 0xeb, 0x1b, 0x1d,
+	0xf2, 0x32, 0xae, 0x49, 0xc3, 0xdf, 0x3d, 0xe8, 0x2d, 0x9b, 0xfd, 0x2e, 0x73, 0x7d, 0x08, 0x4d,
+	0xc6, 0x67, 0xc2, 0x5e, 0x35, 0x7f, 0xff, 0xfd, 0x1b, 0x44, 0x77, 0xe0, 0x4c, 0xc4, 0x96, 0x42,
+	0x0e, 0xa0, 0x53, 0x97, 0xdd, 0xb0, 0xec, 0x4f, 0x5f, 0xab, 0xc9, 0xfa, 0x4e, 0x70, 0x81, 0x7c,
+	0x8a, 0x5c, 0x5f, 0xa0, 0x34, 0x6b, 0x18, 0xd7, 0x41, 0xc3, 0x3d, 0x68, 0x8c, 0x79, 0x41, 0x08,
+	0x34, 0x97, 0xd2, 0x7a, 0xb1, 0xfd, 0x5f, 0x2d, 0xa6, 0xbb, 0xf1, 0x0e, 0x7c, 0xdf, 0xec, 0x6e,
+	0x0c, 0x1a, 0xe1, 0x63, 0xe8, 0x1b, 0x21, 0xcb, 0xe7, 0xe5, 0x11, 0xb4, 0xcc, 0xa4, 0xcd, 0x6a,
+	0x35, 0xde, 0x2c, 0xd9, 0x71, 0xc2, 0x6f, 0xa0, 0x5b, 0x9b, 0x4c, 0xe2, 0x05, 0xd5, 0x97, 0x75,
+	0x62, 0xf3, 0x4f, 0x3e, 0x80, 0xf6, 0x94, 0xcd, 0x51, 0xe9, 0x2a, 0x73, 0x85, 0x42, 0xe6, 0xe2,
+	0xcc, 0x53, 0x63, 0x16, 0xd2, 0x96, 0xc0, 0x75, 0xf5, 0x6e, 0xd4, 0xf0, 0x5d, 0x9a, 0x17, 0x40,
+	0x27, 0x63, 0x4a, 0x31, 0x3e, 0xb7, 0xcd, 0xeb, 0xc6, 0x35, 0x0c, 0x25, 0x6c, 0xaf, 0x5d, 0x87,
+	0xa3, 0x9c, 0x4f, 0x53, 0x24, 0x5f, 0x42, 0x33, 0xe7, 0x4c, 0xbf, 0xd5, 0xe3, 0x69, 0x99, 0xab,
+	0xb6, 0x6c, 0xbc, 0xa1, 0x2d, 0xa6, 0x96, 0xaa, 0x2d, 0x47, 0x5f, 0xff, 0x75, 0xbd, 0xe3, 0xfd,
+	0x7d, 0xbd, 0xe3, 0xfd, 0x73, 0xbd, 0xe3, 0xfd, 0xfa, 0xef, 0xce, 0x1d, 0x78, 0x30, 0x11, 0x59,
+	0x7d, 0xc5, 0xa6, 0x58, 0x68, 0x21, 0x52, 0xb5, 0x7e, 0xc4, 0x7f, 0x9e, 0xf7, 0xb2, 0x6d, 0xff,
+	0xbe, 0xfa, 0x3f, 0x00, 0x00, 0xff, 0xff, 0x88, 0x1e, 0x62, 0xa4, 0x73, 0x06, 0x00, 0x00,
 }

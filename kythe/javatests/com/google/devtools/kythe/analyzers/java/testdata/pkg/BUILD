@@ -1,4 +1,18 @@
-load("//tools:build_rules/kythe.bzl", "java_verifier_test")
+load("//tools:build_rules/kythe.bzl", "java_verifier_test", "kythe_integration_test")
+
+ticket_root = "kythe://kythe?path=kythe/javatests/com/google/devtools/kythe/analyzers/java/testdata/pkg"
+
+kythe_integration_test(
+    name = "cross_file_integration_test",
+    srcs = [
+        ":cross_file_tests",
+        ":files_tests",
+    ],
+    file_tickets = [
+        ticket_root + "/Files.java",
+        ticket_root + "/CrossFile.java",
+    ],
+)
 
 java_verifier_test(
     name = "annotations_tests",
@@ -16,6 +30,16 @@ java_verifier_test(
     name = "definitions_tests",
     size = "small",
     srcs = ["Definitions.java"],
+)
+
+java_verifier_test(
+    name = "jvm_definitions_tests",
+    size = "small",
+    srcs = ["Definitions.java"],
+    indexer_opts = [
+        "--verbose",
+        "--emit_jvm_signatures",
+    ],
 )
 
 java_verifier_test(
@@ -57,7 +81,10 @@ java_verifier_test(
 java_verifier_test(
     name = "imports_tests",
     size = "small",
-    srcs = ["Imports.java"],
+    srcs = [
+        "Imports.java",
+        "StaticMethods.java",
+    ],
 )
 
 java_verifier_test(
@@ -73,6 +100,27 @@ java_verifier_test(
     deps = [":files_tests"],
 )
 
+java_verifier_test(
+    name = "jvm_files_tests",
+    size = "small",
+    srcs = ["Files.java"],
+    indexer_opts = [
+        "--verbose",
+        "--emit_jvm_signatures",
+    ],
+)
+
+java_verifier_test(
+    name = "jvm_cross_file_tests",
+    size = "small",
+    srcs = ["CrossFile.java"],
+    indexer_opts = [
+        "--verbose",
+        "--emit_jvm_signatures",
+    ],
+    deps = [":jvm_files_tests"],
+)
+
 # TODO This test currently fails: https://phabricator-dot-kythe-repo.appspot.com/T185
 java_verifier_test(
     name = "generic_class_tests",
@@ -82,6 +130,12 @@ java_verifier_test(
         "arc-ignore",
         "manual",
     ],
+)
+
+java_verifier_test(
+    name = "generic_comment_tests",
+    size = "small",
+    srcs = ["GenericComments.java"],
 )
 
 java_verifier_test(
@@ -128,6 +182,31 @@ java_verifier_test(
     name = "methods_tests",
     size = "small",
     srcs = ["Methods.java"],
+)
+
+java_verifier_test(
+    name = "metadata_tests",
+    srcs = [
+        "Metadata.java",
+    ],
+    meta = [
+        "Metadata.java.meta",
+    ],
+)
+
+java_verifier_test(
+    name = "protobuf_metadata_tests",
+    srcs = [
+        "ProtobufMetadata.java",
+    ],
+    indexer_opts = [
+        "--verbose",
+        "--default_metadata_corpus=default",
+    ],
+    meta = [
+        "ProtobufMetadata.java.pb.meta",
+    ],
+    vnames_config = "protobuf_vnames.json",
 )
 
 java_verifier_test(

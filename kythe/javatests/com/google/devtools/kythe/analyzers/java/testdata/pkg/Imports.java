@@ -7,7 +7,10 @@ package pkg;
 import static java.lang.String.CASE_INSENSITIVE_ORDER;
 //- @hashCode ref/imports HashCodeMethod
 import static java.util.Objects.hashCode;
-// TODO(schroederc): handle overloaded static method imports
+
+//- @staticMethod ref/imports StaticBool
+//- @staticMethod ref/imports StaticInt
+import static pkg.StaticMethods.staticMethod;
 
 //- @"java.util" ref UtilPackage
 //- UtilPackage.node/kind package
@@ -17,7 +20,8 @@ import java.util.List;
 import java.util.LinkedList;
 
 public class Imports {
-  //- @List ref ListI
+  //- ListI childof ListAbs
+  //- @List ref ListAbs
   public static void forAll(List<String> lst) {
     //- @String ref String
     //- @CASE_INSENSITIVE_ORDER ref StringConst
@@ -26,4 +30,3 @@ public class Imports {
 }
 
 //- String.node/kind record
-//- String named vname("java.lang.String","","","","java")

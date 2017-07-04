@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"go/ast"
 	"go/token"
 	"io/ioutil"
@@ -29,7 +30,12 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
+	"kythe.io/kythe/go/test/testutil"
+	"kythe.io/kythe/go/util/metadata"
+	"kythe.io/kythe/go/util/ptypes"
+
 	apb "kythe.io/kythe/proto/analysis_proto"
+	gopb "kythe.io/kythe/proto/go_proto"
 	spb "kythe.io/kythe/proto/storage_proto"
 )
 
@@ -70,6 +76,50 @@ func oneFileCompilation(path, pkg, content string) (*apb.CompilationUnit, string
 		}},
 		SourceFile: []string{path},
 	}, digest
+}
+
+func TestBuildTags(t *testing.T) {
+	// Make sure build tags are being respected. Synthesize a compilation with
+	// two trivial files, one tagged and the other not. After resolving, there
+	// should only be one file.
+
+	const keepFile = "// +build keepme\n\npackage foo"
+	const dropFile = "// +build ignore\n\npackage foo"
+
+	// Cobble together the data from two compilations into one.
+	u1, keepDigest := oneFileCompilation("keep.go", "foo", keepFile)
+	u2, dropDigest := oneFileCompilation("drop.go", "foo", dropFile)
+	u1.RequiredInput = append(u1.RequiredInput, u2.RequiredInput...)
+	u1.SourceFile = append(u1.SourceFile, u2.SourceFile...)
+
+	fetcher := memFetcher{
+		keepDigest: keepFile,
+		dropDigest: dropFile,
+	}
+
+	// Attach details with the build tags we care about.
+	info, err := ptypes.MarshalAny(&gopb.GoDetails{
+		BuildTags: []string{"keepme"},
+	})
+	if err != nil {
+		t.Fatalf("Marshaling Go details failed: %v", err)
+	}
+	u1.Details = append(u1.Details, info)
+
+	pi, err := Resolve(u1, fetcher, nil)
+	if err != nil {
+		t.Fatalf("Resolving compilation failed: %v", err)
+	}
+
+	// Make sure the files are what we think we want.
+	if n := len(pi.SourceText); n != 1 {
+		t.Errorf("Wrong number of source files: got %d, want 1", n)
+	}
+	for _, got := range pi.SourceText {
+		if got != keepFile {
+			t.Errorf("Wrong source:\n got: %#q\nwant: %#q", got, keepFile)
+		}
+	}
 }
 
 func TestResolve(t *testing.T) { // are you function enough not to back down?
@@ -264,6 +314,100 @@ func TestSink(t *testing.T) {
 		if !hasEdge(want.src, want.tgt, want.kind) {
 			t.Errorf("Missing edge %+v ―%s→ %+v", want.src, want.kind, want.tgt)
 		}
+	}
+}
+
+func TestComments(t *testing.T) {
+	// Verify that comment text is correctly escaped when translated into
+	// documentation nodes.
+	const input = `// Comment [escape] tests \t all the things.
+package pkg
+
+/*
+  Comment [escape] tests \t all the things.
+*/
+var z int
+`
+	unit, digest := oneFileCompilation("testfile/comment.go", "pkg", input)
+	pi, err := Resolve(unit, memFetcher{digest: input}, &ResolveOptions{Info: XRefTypeInfo()})
+	if err != nil {
+		t.Fatalf("Resolve failed: %v\nInput unit:\n%s", err, proto.MarshalTextString(unit))
+	}
+
+	var single, multi string
+	if err := pi.Emit(context.Background(), func(_ context.Context, e *spb.Entry) error {
+		if e.FactName != "/kythe/text" {
+			return nil
+		}
+		if e.Source.Signature == "package doc" {
+			if single != "" {
+				return fmt.Errorf("multiple package docs (%q, %q)", single, string(e.FactValue))
+			}
+			single = string(e.FactValue)
+		} else if e.Source.Signature == "var z doc" {
+			if multi != "" {
+				return fmt.Errorf("multiple variable docs (%q, %q)", multi, string(e.FactValue))
+			}
+			multi = string(e.FactValue)
+		}
+		return nil
+	}, nil); err != nil {
+		t.Fatalf("Emit unexpectedly failed: %v", err)
+	}
+
+	const want = `Comment \[escape\] tests \\t all the things.`
+	if single != want {
+		t.Errorf("Incorrect single-line comment escaping:\ngot  %#q\nwant %#q", single, want)
+	}
+	if multi != want {
+		t.Errorf("Incorrect multi-line comment escaping:\ngot  %#q\nwant %#q", multi, want)
+	}
+}
+
+func TestRules(t *testing.T) {
+	const input = "package main\n"
+	unit, digest := oneFileCompilation("main.go", "main", input)
+	unit.RequiredInput = append(unit.RequiredInput, &apb.CompilationUnit_FileInput{
+		VName: &spb.VName{Signature: "hey ho let's go"},
+		Info:  &apb.FileInfo{Path: "meta"},
+	})
+	fetcher := memFetcher{digest: input}
+
+	// Resolve the compilation with a rule checker that recognizes the special
+	// input we added and emits a rule for the main file. This verifies we get
+	// the right mapping from paths back to source inputs.
+	pi, err := Resolve(unit, fetcher, &ResolveOptions{
+		CheckRules: func(ri *apb.CompilationUnit_FileInput, _ Fetcher) (*Ruleset, error) {
+			if ri.Info.Path == "meta" {
+				return &Ruleset{
+					Path: "main.go", // associate these rules to the main source
+					Rules: metadata.Rules{{
+						Begin: 1,
+						End:   2,
+						VName: ri.VName,
+					}},
+				}, nil
+			}
+			return nil, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Resolve failed: %v", err)
+	}
+
+	// The rules should have an entry for the primary source file, and it
+	// should contain the rule we generated.
+	rs, ok := pi.Rules[pi.Files[0]]
+	if !ok {
+		t.Fatal("Missing primary source file")
+	}
+	want := metadata.Rules{{
+		Begin: 1,
+		End:   2,
+		VName: &spb.VName{Signature: "hey ho let's go"},
+	}}
+	if err := testutil.DeepEqual(want, rs); err != nil {
+		t.Errorf("Wrong rules: %v", err)
 	}
 }
 

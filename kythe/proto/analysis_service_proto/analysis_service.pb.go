@@ -29,7 +29,9 @@ var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
-const _ = proto.ProtoPackageIsVersion1
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
@@ -37,7 +39,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion4
 
 // Client API for CompilationAnalyzer service
 
@@ -49,6 +51,10 @@ type CompilationAnalyzerClient interface {
 	// A driver may choose to retry analyses that return RPC errors.  It should
 	// not retry analyses that are reported as finished unless it is necessary to
 	// recover from an external production issue.
+	//
+	// If the RPC implementation does not support out-of-band error messages, the
+	// analyzer may report status by setting the final_result field of its last
+	// AnalysisOutput message.
 	Analyze(ctx context.Context, in *kythe_proto2.AnalysisRequest, opts ...grpc.CallOption) (CompilationAnalyzer_AnalyzeClient, error)
 }
 
@@ -102,6 +108,10 @@ type CompilationAnalyzerServer interface {
 	// A driver may choose to retry analyses that return RPC errors.  It should
 	// not retry analyses that are reported as finished unless it is necessary to
 	// recover from an external production issue.
+	//
+	// If the RPC implementation does not support out-of-band error messages, the
+	// analyzer may report status by setting the final_result field of its last
+	// AnalysisOutput message.
 	Analyze(*kythe_proto2.AnalysisRequest, CompilationAnalyzer_AnalyzeServer) error
 }
 
@@ -141,6 +151,7 @@ var _CompilationAnalyzer_serviceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
+	Metadata: "kythe/proto/analysis_service.proto",
 }
 
 // Client API for FileDataService service
@@ -253,11 +264,14 @@ var _FileDataService_serviceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
+	Metadata: "kythe/proto/analysis_service.proto",
 }
+
+func init() { proto.RegisterFile("kythe/proto/analysis_service.proto", fileDescriptorAnalysisService) }
 
 var fileDescriptorAnalysisService = []byte{
 	// 210 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xe2, 0x52, 0xca, 0xae, 0x2c, 0xc9,
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0xca, 0xae, 0x2c, 0xc9,
 	0x48, 0xd5, 0x2f, 0x28, 0xca, 0x2f, 0xc9, 0xd7, 0x4f, 0xcc, 0x4b, 0xcc, 0xa9, 0x2c, 0xce, 0x2c,
 	0x8e, 0x2f, 0x4e, 0x2d, 0x2a, 0xcb, 0x4c, 0x4e, 0xd5, 0x03, 0x0b, 0x0b, 0x71, 0x83, 0xd5, 0x40,
 	0x38, 0x52, 0x52, 0xd8, 0x34, 0x40, 0xe4, 0x8c, 0xe2, 0xb9, 0x84, 0x9d, 0xf3, 0x73, 0x0b, 0x32,

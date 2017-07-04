@@ -22,13 +22,13 @@
 /// \file
 /// \brief Defines the class kythe::GraphObserver
 
-#include <openssl/sha.h> // for SHA256
+#include <openssl/sha.h>  // for SHA256
 
-#include "glog/logging.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/Specifiers.h"
 #include "clang/Lex/Preprocessor.h"
+#include "glog/logging.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/StringRef.h"
@@ -37,7 +37,7 @@
 
 #include "kythe/cxx/common/indexing/KytheOutputStream.h"
 #include "kythe/cxx/common/indexing/MaybeFew.h"
-#include "kythe/cxx/common/json_proto.h" // for EncodeBase64
+#include "kythe/cxx/common/json_proto.h"  // for EncodeBase64
 
 namespace kythe {
 
@@ -63,8 +63,8 @@ String CompressString(const String &InString, bool Force = false) {
 }
 
 enum class ProfilingEvent {
-  Enter, ///< A profiling section was entered.
-  Exit   ///< A profiling section was left.
+  Enter,  ///< A profiling section was entered.
+  Exit    ///< A profiling section was left.
 };
 
 /// \brief A callback used to report a profiling event.
@@ -75,7 +75,7 @@ using ProfilingCallback = std::function<void(const char *, ProfilingEvent)>;
 
 /// \brief Ensures that Enter events are paired with Exit events.
 class ProfileBlock {
-public:
+ public:
   /// \param Callback reporting callback; must outlive `ProfileBlock`
   /// \param SectionName name for the section; must outlive `ProfileBlock`
   ProfileBlock(const ProfilingCallback &Callback, const char *SectionName)
@@ -84,7 +84,7 @@ public:
   }
   ~ProfileBlock() { Callback(SectionName, ProfilingEvent::Exit); }
 
-private:
+ private:
   const ProfilingCallback &Callback;
   const char *SectionName;
 };
@@ -95,7 +95,7 @@ private:
 /// Before calling a member on a `GraphObserver` that accepts a `SourceLocation`
 /// as an argument, the `GraphObserver`'s `SourceManager` must be set.
 class GraphObserver {
-public:
+ public:
   /// \brief Provides additional information about an object that may be
   /// used to determine responsibility for processing it.
   ///
@@ -105,7 +105,7 @@ public:
   /// object's representative source path, whether a claim has been successfully
   /// made (thus making the token active), and so on.
   class ClaimToken {
-  public:
+   public:
     virtual ~ClaimToken(){};
     /// \brief Returns a string representation of `Identity` stamped with this
     /// token.
@@ -121,11 +121,11 @@ public:
 
   /// \brief Takes care of balancing calls to `Delimit` and `Undelimit`.
   class Delimiter {
-  public:
+   public:
     Delimiter(GraphObserver &Self) : S(Self) { S.Delimit(); }
     ~Delimiter() { S.Undelimit(); }
 
-  private:
+   private:
     GraphObserver &S;
   };
 
@@ -142,7 +142,7 @@ public:
   /// the node should be analyzed), and its `Identity`, a string of bytes
   /// determined by the `IndexerASTHooks` and `GraphObserver` override.
   class NodeId {
-  public:
+   public:
     NodeId(const ClaimToken *Token, const std::string &Identity)
         : Token(Token), Identity(CompressString(Identity)) {}
     NodeId(const NodeId &C) { *this = C; }
@@ -179,7 +179,7 @@ public:
     const std::string &getRawIdentity() const { return Identity; }
     const ClaimToken *getToken() const { return Token; }
 
-  private:
+   private:
     const ClaimToken *Token;
     std::string Identity;
   };
@@ -239,10 +239,10 @@ public:
     /// \brief C++ distinguishes between several equivalence classes of names,
     /// a selection of which we consider important to represent.
     enum class NameEqClass {
-      None,  ///< This name is not a member of a significant class.
-      Union, ///< This name names a union record.
-      Class, ///< This name names a non-union class or struct.
-      Macro  ///< This name names a macro.
+      None,   ///< This name is not a member of a significant class.
+      Union,  ///< This name names a union record.
+      Class,  ///< This name names a non-union class or struct.
+      Macro   ///< This name names a macro.
       // TODO(zarko): Enums should be part of their own NameEqClass.
       // We should consider whether representation type information should
       // be part of enum (lookup) names--or whether this information must
@@ -269,8 +269,8 @@ public:
   /// an edge adds unique content to the graph, that edge may be marked as
   /// Unclaimable.
   enum class Claimability {
-    Claimable,  ///< This edge may be dropped by claiming.
-    Unclaimable ///< This edge must always be emitted.
+    Claimable,   ///< This edge may be dropped by claiming.
+    Unclaimable  ///< This edge must always be emitted.
   };
 
   GraphObserver() {}
@@ -306,8 +306,8 @@ public:
 
   /// \brief Returns a claim token for anonymous namespaces declared at `Loc`.
   /// \param Loc The declaration site of the anonymous namespace.
-  virtual const ClaimToken *
-  getAnonymousNamespaceClaimToken(clang::SourceLocation Loc) {
+  virtual const ClaimToken *getAnonymousNamespaceClaimToken(
+      clang::SourceLocation Loc) {
     return getDefaultClaimToken();
   }
 
@@ -339,10 +339,10 @@ public:
   /// be AliasedType
   /// \param MarkedSource marked source for the alias.
   /// \return the `NodeId` for the type alias node this definition defines.
-  virtual NodeId
-  recordTypeAliasNode(const NameId &AliasName, const NodeId &AliasedType,
-                      const MaybeFew<NodeId> &RootAliasedType,
-                      const MaybeFew<MarkedSource> &MarkedSource) = 0;
+  virtual NodeId recordTypeAliasNode(
+      const NameId &AliasName, const NodeId &AliasedType,
+      const MaybeFew<NodeId> &RootAliasedType,
+      const MaybeFew<MarkedSource> &MarkedSource) = 0;
 
   /// \brief Returns the ID for a nominal type node (such as a struct,
   /// typedef or enum).
@@ -356,10 +356,9 @@ public:
   /// \param MarkedSource marked source for the type node.
   /// \param Parent if non-null, the parent node of this nominal type.
   /// \return the `NodeId` for the type node corresponding to `TypeName`.
-  virtual NodeId
-  recordNominalTypeNode(const NameId &TypeName,
-                        const MaybeFew<MarkedSource> &MarkedSource,
-                        const NodeId *Parent) = 0;
+  virtual NodeId recordNominalTypeNode(
+      const NameId &TypeName, const MaybeFew<MarkedSource> &MarkedSource,
+      const NodeId *Parent) = 0;
 
   /// \brief Records a type application node, returning its ID.
   /// \note This is the elimination form for the `abs` node.
@@ -377,8 +376,8 @@ public:
   /// \brief Records a sigma node, returning its ID.
   /// \param Params The `NodeId`s of the types to include.
   /// \return The result's ID.
-  virtual NodeId
-  recordTsigmaNode(const std::vector<const NodeId *> &Params) = 0;
+  virtual NodeId recordTsigmaNode(
+      const std::vector<const NodeId *> &Params) = 0;
 
   enum class RecordKind { Struct, Class, Union, Category };
 
@@ -443,8 +442,8 @@ public:
 
   /// \brief Describes whether an enum is scoped (`enum class`).
   enum class EnumKind {
-    Scoped,  ///< This enum is scoped (an `enum class`).
-    Unscoped ///< This enum is unscoped (a plain `enum`).
+    Scoped,   ///< This enum is scoped (an `enum class`).
+    Unscoped  ///< This enum is unscoped (a plain `enum`).
   };
 
   /// \brief Records a node representing a dependent type abstraction, like
@@ -510,7 +509,6 @@ public:
 
   /// \brief Records that a variable (either local or global) has been
   /// declared.
-  /// \param DeclName The name to which this element is being bound.
   /// \param DeclNode The identifier for this particular element.
   /// \param Compl The completeness of this variable declaration.
   /// \param Subkind Which kind of variable declaration this is.
@@ -518,17 +516,14 @@ public:
   // TODO(zarko): We should make note of the storage-class-specifier (dcl.stc)
   // of the variable, which is a property the variable itself and not of its
   // type.
-  virtual void recordVariableNode(const NameId &DeclName,
-                                  const NodeId &DeclNode, Completeness Compl,
+  virtual void recordVariableNode(const NodeId &DeclNode, Completeness Compl,
                                   VariableSubkind Subkind,
                                   const MaybeFew<MarkedSource> &MarkedSource) {}
 
   /// \brief Records that a namespace has been declared.
-  /// \param DeclName The name to which this element is being bound.
   /// \param DeclNode The identifier for this particular element.
   /// \param MarkedSource marked source for this namespace.
-  virtual void recordNamespaceNode(const NameId &DeclName,
-                                   const NodeId &DeclNode,
+  virtual void recordNamespaceNode(const NodeId &DeclNode,
                                    const MaybeFew<MarkedSource> &MarkedSource) {
   }
 
@@ -609,26 +604,6 @@ public:
   /// and the `DefnId`.
   virtual void recordCompletionRange(const Range &SourceRange,
                                      const NodeId &DefnId, Specificity Spec) {}
-
-  /// \brief Records that a particular `Node` has been given some `Name`.
-  ///
-  /// A given node may have zero or more names distinct from its `NodeId`.
-  /// These may be used as entry points into the graph. For example,
-  /// `recordNamedEdge` may be called with the unique `NodeId` for a function
-  /// definition and the `NameId` corresponding to the fully-qualified name
-  /// of that function; it may subsequently be called with that same `NodeId`
-  /// and a `NameId` corresponding to that function's mangled name.
-  ///
-  /// A call to `recordNamedEdge` may have the following form:
-  /// ~~~
-  /// // DeclName is the lookup name for some record type (roughly, the "C" in
-  /// // "class C").
-  /// GraphObserver::NameId DeclName = BuildNameIdForDecl(RecordDecl);
-  /// // DeclNode refers to a particular decl of some record type.
-  /// GraphObserver::NodeId DeclNode = BuildNodeIdForDecl(RecordDecl);
-  /// Observer->recordNamedEdge(DeclNode, DeclName);
-  /// ~~~
-  virtual void recordNamedEdge(const NodeId &Node, const NameId &Name) {}
 
   /// \brief Records the type of a node as an edge in the graph.
   /// \param TermNodeId The identifier for the node to be given a type.
@@ -720,27 +695,25 @@ public:
                                  clang::AccessSpecifier AS) {}
 
   /// \brief Records a node with a provided kind.
-  /// \param Name The name of the node to record (including a `named` edge from
-  /// `Id`).
   /// \param Id The ID of the node to record.
   /// \param NodeKind The kind of the node ("google/protobuf")
   /// \param Compl Whether this node is complete.
-  virtual void recordUserDefinedNode(const NameId &Name, const NodeId &Id,
+  virtual void recordUserDefinedNode(const NodeId &Id,
                                      const llvm::StringRef &NodeKind,
                                      Completeness Compl) {}
 
   /// \brief Records a use site for some decl.
-  virtual void
-  recordDeclUseLocation(const Range &SourceRange, const NodeId &DeclId,
-                        Claimability Cl = Claimability::Claimable) {}
+  virtual void recordDeclUseLocation(
+      const Range &SourceRange, const NodeId &DeclId,
+      Claimability Cl = Claimability::Claimable) {}
 
   /// \brief Records that a type was spelled out at a particular location.
   /// \param SourceRange The source range covering the type spelling.
   /// \param TypeNode The identifier for the type being spelled out.
   /// \param Cr Whether this information can be dropped by claiming.
-  virtual void
-  recordTypeSpellingLocation(const Range &SourceRange, const NodeId &TypeId,
-                             Claimability Cl = Claimability::Claimable) {}
+  virtual void recordTypeSpellingLocation(
+      const Range &SourceRange, const NodeId &TypeId,
+      Claimability Cl = Claimability::Claimable) {}
 
   /// \brief Records that a macro was defined.
   virtual void recordMacroNode(const NodeId &MacroNode) {}
@@ -789,15 +762,6 @@ public:
   virtual void recordBoundQueryRange(const Range &SourceRange,
                                      const NodeId &MacroId) {}
 
-  /// \brief Records that an undefined macro was queried at some location.
-  ///
-  /// Testing a macro for definedness does not expand it.
-  ///
-  /// \param SourceRange The `Range` covering the text causing the query.
-  /// \param MacroName The `NameId` of the macro being queried.
-  virtual void recordUnboundQueryRange(const Range &SourceRange,
-                                       const NameId &MacroName) {}
-
   /// \brief Records that another resource was included at some location.
   /// \param SourceRange The `Range` covering the text causing the inclusion.
   /// \param File The resource being included.
@@ -833,8 +797,8 @@ public:
   /// \brief Append a string representation of the identifier of the main
   /// source file to the given stream.
   /// \pre Preprocessing is complete.
-  virtual void
-  AppendMainSourceFileIdentifierToStream(llvm::raw_ostream &Ostream) {}
+  virtual void AppendMainSourceFileIdentifierToStream(
+      llvm::raw_ostream &Ostream) {}
 
   /// \brief Checks whether this `GraphObserver` should emit data for some
   /// `NodeId` and its descendants.
@@ -909,14 +873,14 @@ public:
   /// NB: FileIds represent each *inclusion* of a file. This allows us to
   /// map from the FileId inside a SourceLocation to a (file, transcript)
   /// pair.
-  virtual const ClaimToken *
-  getClaimTokenForLocation(const clang::SourceLocation L) {
+  virtual const ClaimToken *getClaimTokenForLocation(
+      const clang::SourceLocation L) {
     return getDefaultClaimToken();
   }
 
   /// \brief Returns a `ClaimToken` covering a given source range.
-  virtual const ClaimToken *
-  getClaimTokenForRange(const clang::SourceRange &SR) {
+  virtual const ClaimToken *getClaimTokenForRange(
+      const clang::SourceRange &SR) {
     return getDefaultClaimToken();
   }
 
@@ -948,7 +912,7 @@ public:
   virtual void iterateOverClaimedFiles(
       std::function<bool(clang::FileID, const NodeId &)> iter) {}
 
-protected:
+ protected:
   clang::SourceManager *SourceManager = nullptr;
   clang::LangOptions *LangOptions = nullptr;
   clang::Preprocessor *Preprocessor = nullptr;
@@ -959,10 +923,10 @@ inline GraphObserver::~GraphObserver() {}
 
 /// \brief A GraphObserver that does nothing.
 class NullGraphObserver : public GraphObserver {
-public:
+ public:
   /// \brief A ClaimToken that provides no information or evidence.
   class NullClaimToken : public ClaimToken {
-  public:
+   public:
     std::string StampIdentity(const std::string &Identity) const override {
       return Identity;
     }
@@ -974,7 +938,7 @@ public:
       return RHS.GetClass() != GetClass();
     }
 
-  private:
+   private:
     static void *NullClaimTokenClass;
   };
 
@@ -987,10 +951,10 @@ public:
     return NodeId(getDefaultClaimToken(), "");
   }
 
-  NodeId
-  recordTypeAliasNode(const NameId &AliasName, const NodeId &AliasedType,
-                      const MaybeFew<NodeId> &RootAliasedType,
-                      const MaybeFew<MarkedSource> &MarkedSource) override {
+  NodeId recordTypeAliasNode(
+      const NameId &AliasName, const NodeId &AliasedType,
+      const MaybeFew<NodeId> &RootAliasedType,
+      const MaybeFew<MarkedSource> &MarkedSource) override {
     return NodeId(getDefaultClaimToken(), "");
   }
 
@@ -1020,7 +984,7 @@ public:
 
   ~NullGraphObserver() {}
 
-private:
+ private:
   NullClaimToken DefaultToken;
 };
 
@@ -1030,18 +994,18 @@ inline llvm::raw_ostream &operator<<(llvm::raw_ostream &OS,
                                      const GraphObserver::NameId &N) {
   OS << N.Path << "#";
   switch (N.EqClass) {
-  case GraphObserver::NameId::NameEqClass::None:
-    OS << "n";
-    break;
-  case GraphObserver::NameId::NameEqClass::Class:
-    OS << "c";
-    break;
-  case GraphObserver::NameId::NameEqClass::Union:
-    OS << "u";
-    break;
-  case GraphObserver::NameId::NameEqClass::Macro:
-    OS << "m";
-    break;
+    case GraphObserver::NameId::NameEqClass::None:
+      OS << "n";
+      break;
+    case GraphObserver::NameId::NameEqClass::Class:
+      OS << "c";
+      break;
+    case GraphObserver::NameId::NameEqClass::Union:
+      OS << "u";
+      break;
+    case GraphObserver::NameId::NameEqClass::Macro:
+      OS << "m";
+      break;
   }
   return OS;
 }
@@ -1096,6 +1060,6 @@ static inline std::string HashToString(size_t Hash) {
   return HashOut;
 }
 
-} // namespace kythe
+}  // namespace kythe
 
-#endif // KYTHE_CXX_INDEXER_CXX_GRAPH_OBSERVER_H_
+#endif  // KYTHE_CXX_INDEXER_CXX_GRAPH_OBSERVER_H_

@@ -67,6 +67,9 @@ class MarkedSourceGenerator {
   /// Generate marked source by pretty-printing a function's prototype.
   MarkedSource GenerateMarkedSourceForFunction(const clang::FunctionDecl *decl);
 
+  /// Generate marked source for this decl, which must be a NamedDecl.
+  MarkedSource GenerateMarkedSourceForNamedDecl();
+
   /// \brief Fill the provided MarkedSource node with the template argument list
   /// from `decl`.
   ///

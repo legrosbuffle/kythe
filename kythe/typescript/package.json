@@ -4,12 +4,14 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "browse": "node indexer.js indexer.ts | ./browse",
-    "test": "node test.js"
+    "browse": "node indexer.js tsconfig.json | ./browse",
+    "test": "yarn build && yarn runtest",
+    "runtest": "node test.js",
+    "fmt": "clang-format -i *.ts"
   },
   "dependencies": {
     "@types/node": "^7.0.4",
     "source-map-support": "^0.4.11",
-    "typescript": "^2.1.5"
+    "typescript": "^2.3.1"
   }
 }

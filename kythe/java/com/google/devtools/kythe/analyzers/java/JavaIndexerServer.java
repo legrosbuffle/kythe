@@ -19,13 +19,16 @@ package com.google.devtools.kythe.analyzers.java;
 import com.beust.jcommander.Parameter;
 import com.google.devtools.kythe.analyzers.base.FactEmitter;
 import com.google.devtools.kythe.analyzers.base.GRPCCompilationAnalyzer;
-import com.google.devtools.kythe.analyzers.base.IndexerConfig;
 import com.google.devtools.kythe.platform.java.JavacAnalysisDriver;
 import com.google.devtools.kythe.platform.shared.AnalysisException;
 import com.google.devtools.kythe.platform.shared.FileDataProvider;
+import com.google.devtools.kythe.platform.shared.KytheMetadataLoader;
+import com.google.devtools.kythe.platform.shared.MetadataLoaders;
+import com.google.devtools.kythe.platform.shared.ProtobufMetadataLoader;
 import com.google.devtools.kythe.proto.Analysis.CompilationUnit;
 import io.grpc.netty.NettyServerBuilder;
 import java.io.IOException;
+import java.util.Optional;
 
 /** Binary to run Kythe's Java indexer as a CompilationAnalyzer service. */
 public class JavaIndexerServer {
@@ -48,25 +51,31 @@ public class JavaIndexerServer {
 
   private static class JavaCompilationAnalyzer extends GRPCCompilationAnalyzer {
     private final JavacAnalysisDriver driver = new JavacAnalysisDriver();
-    private final IndexerConfig config;
+    private final JavaIndexerConfig config;
 
-    public JavaCompilationAnalyzer(IndexerConfig config) {
+    public JavaCompilationAnalyzer(JavaIndexerConfig config) {
       this.config = config;
     }
 
     @Override
     public void analyzeCompilation(
-        CompilationUnit compilation, FileDataProvider fileData, FactEmitter emitter)
+        CompilationUnit compilation,
+        Optional<String> revision,
+        FileDataProvider fileData,
+        FactEmitter emitter)
         throws AnalysisException {
+      MetadataLoaders metadataLoaders = new MetadataLoaders();
+      metadataLoaders.addLoader(
+          new ProtobufMetadataLoader(compilation, config.getDefaultMetadataCorpus()));
+      metadataLoaders.addLoader(new KytheMetadataLoader());
       driver.analyze(
-          new KytheJavacAnalyzer(config, emitter, getStatisticsCollector()),
+          new KytheJavacAnalyzer(config, emitter, getStatisticsCollector(), metadataLoaders),
           compilation,
-          fileData,
-          false);
+          fileData);
     }
   }
 
-  private static class ServerConfig extends IndexerConfig {
+  private static class ServerConfig extends JavaIndexerConfig {
     @Parameter(
       names = {"-p", "--port"},
       required = true,

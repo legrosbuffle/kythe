@@ -78,11 +78,12 @@ using VNameLookup =
 class MetadataSupport {
  public:
   virtual ~MetadataSupport() {}
-  /// \brief Attempt to parse the file named `filename` with contents in
-  /// `buffer`.
+  /// \brief Attempt to parse the file originally named `raw_filename` with
+  /// decoded filename `filename` and contents in `buffer`.
   /// \return A `MetadataFile` on success; otherwise, null.
   virtual std::unique_ptr<kythe::MetadataFile> ParseFile(
-      const std::string &filename, const llvm::MemoryBuffer *buffer) {
+      const std::string &raw_filename, const std::string &filename,
+      const llvm::MemoryBuffer *buffer) {
     return nullptr;
   }
 
@@ -92,16 +93,41 @@ class MetadataSupport {
 
 /// \brief A collection of metadata support implementations.
 ///
-/// Each `MetadataSupport` is tried in vector order. The first one to return
+/// Each `MetadataSupport` is tried in order. The first one to return
 /// a non-null result from `ParseFile` is elected to provide metadata for a
 /// given (`filename`, `buffer`) pair.
-using MetadataSupports = std::vector<std::unique_ptr<MetadataSupport>>;
+///
+/// If the metadata file ends in .h, we assume that it is a valid C++ header
+/// that begins with a comment marker followed immediately by a base64-encoded
+/// buffer. We will decode and parse this buffer using the filename with the .h
+/// removed (as some support implementations discriminate based on extension).
+/// The comment mark, the contents of the comment, and any relevant control
+/// characters must be 7-bit ASCII. The character set used for base64 encoding
+/// is A-Za-z0-9+/ in that order, possibly followed by = or == for padding.
+///
+/// If the comment is a //-style comment, the base64 string must be unbroken.
+/// If the comment is a /* */-style comment, newlines (\n) are permitted.
+class MetadataSupports {
+ public:
+  void Add(std::unique_ptr<MetadataSupport> support) {
+    supports_.push_back(std::move(support));
+  }
+
+  std::unique_ptr<kythe::MetadataFile> ParseFile(
+      const std::string &filename, const llvm::MemoryBuffer *buffer) const;
+
+  void UseVNameLookup(VNameLookup lookup) const;
+
+ private:
+  std::vector<std::unique_ptr<MetadataSupport>> supports_;
+};
 
 /// \brief Enables support for raw JSON-encoded metadata files.
 class KytheMetadataSupport : public MetadataSupport {
  public:
   std::unique_ptr<kythe::MetadataFile> ParseFile(
-      const std::string &filename, const llvm::MemoryBuffer *buffer) override;
+      const std::string &raw_filename, const std::string &filename,
+      const llvm::MemoryBuffer *buffer) override;
 
  private:
   /// \brief Load the JSON-encoded metadata from `json`.

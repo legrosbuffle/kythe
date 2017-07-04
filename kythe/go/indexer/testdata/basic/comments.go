@@ -2,11 +2,12 @@
 package comment
 
 //- Pkg.node/kind package
+//- Pkg.doc/uri "http://godoc.org/test/comments"
 //- PkgDoc.node/kind doc
 //- PkgDoc documents Pkg
 //- PkgDoc.text "Package comment contains comments."
 
-//- @+3"foo" defines/binding Foo?
+//- @+3"foo" defines/binding Foo
 
 /* foo comment */
 var foo int
@@ -55,9 +56,25 @@ func alpha() {}
 //- @+3"widget" defines/binding Widget
 
 // widget comment
-type widget struct {}
+type widget struct {
+	//- Lawyer.node/kind variable
+	//- LawyerDoc documents Lawyer
+	//- LawyerDoc.text "Lawyer takes the bar."
+	//-
+	//- @+3"Lawyer" defines/binding Lawyer
 
-// TODO(fromberger): Handle fields.
+	// Lawyer takes the bar.
+	Lawyer bool
+
+	//- ErrField.node/kind variable
+	//- ErrDoc documents ErrField
+	//- ErrDoc.text "What went wrong."
+	//-
+	//- @+3"error" defines/binding ErrField
+
+	// What went wrong.
+	error
+}
 
 //- Widget.node/kind record
 //- WidgetComment.node/kind doc

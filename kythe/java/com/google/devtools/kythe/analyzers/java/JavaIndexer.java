@@ -18,7 +18,6 @@ package com.google.devtools.kythe.analyzers.java;
 
 import com.beust.jcommander.Parameter;
 import com.google.common.base.Strings;
-import com.google.devtools.kythe.analyzers.base.IndexerConfig;
 import com.google.devtools.kythe.analyzers.base.StreamFactEmitter;
 import com.google.devtools.kythe.extractors.shared.CompilationDescription;
 import com.google.devtools.kythe.extractors.shared.IndexInfoUtils;
@@ -26,8 +25,11 @@ import com.google.devtools.kythe.platform.indexpack.Archive;
 import com.google.devtools.kythe.platform.java.JavacAnalysisDriver;
 import com.google.devtools.kythe.platform.shared.AnalysisException;
 import com.google.devtools.kythe.platform.shared.FileDataCache;
+import com.google.devtools.kythe.platform.shared.KytheMetadataLoader;
 import com.google.devtools.kythe.platform.shared.MemoryStatisticsCollector;
+import com.google.devtools.kythe.platform.shared.MetadataLoaders;
 import com.google.devtools.kythe.platform.shared.NullStatisticsCollector;
+import com.google.devtools.kythe.platform.shared.ProtobufMetadataLoader;
 import java.io.BufferedOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -72,15 +74,19 @@ public class JavaIndexer {
         Strings.isNullOrEmpty(config.getOutputPath())
             ? System.out
             : new BufferedOutputStream(new FileOutputStream(config.getOutputPath()))) {
+      MetadataLoaders metadataLoaders = new MetadataLoaders();
+      metadataLoaders.addLoader(
+          new ProtobufMetadataLoader(desc.getCompilationUnit(), config.getDefaultMetadataCorpus()));
+      metadataLoaders.addLoader(new KytheMetadataLoader());
       new JavacAnalysisDriver()
           .analyze(
               new KytheJavacAnalyzer(
                   config,
                   new StreamFactEmitter(stream),
-                  statistics == null ? NullStatisticsCollector.getInstance() : statistics),
+                  statistics == null ? NullStatisticsCollector.getInstance() : statistics,
+                  metadataLoaders),
               desc.getCompilationUnit(),
-              new FileDataCache(desc.getFileContents()),
-              false);
+              new FileDataCache(desc.getFileContents()));
     }
 
     if (statistics != null) {
@@ -95,7 +101,7 @@ public class JavaIndexer {
     System.exit(exitCode);
   }
 
-  private static class StandaloneConfig extends IndexerConfig {
+  private static class StandaloneConfig extends JavaIndexerConfig {
     @Parameter(description = "<compilation to analyze>", required = true)
     private List<String> compilation = new ArrayList<>();
 

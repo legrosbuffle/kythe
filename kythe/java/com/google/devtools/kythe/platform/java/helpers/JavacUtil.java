@@ -42,7 +42,7 @@ public class JavacUtil {
       TypeSymbol owner = (TypeSymbol) methodSymbol.owner;
       // Iterates over the list of all super classes and interfaces
       for (Type sup : types.closure(owner.type)) {
-        if (sup == owner.type) {
+        if (sup.tsym.equals(owner)) {
           continue; // Skip the owner of the method
         }
 
@@ -67,7 +67,7 @@ public class JavacUtil {
     char[] nameChars = name.toCharArray();
     int dotIndex = len;
     while (true) {
-      ClassSymbol s = symtab.classes.get(names.fromChars(nameChars, 0, len));
+      ClassSymbol s = symtab.getClass(symtab.java_base, names.fromChars(nameChars, 0, len));
       if (s != null) {
         return s;
       }

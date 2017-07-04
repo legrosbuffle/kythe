@@ -39,12 +39,73 @@ var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
-const _ = proto.ProtoPackageIsVersion1
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
+
+// What kind of override this is.
+type FileDecorations_Override_Kind int32
+
+const (
+	FileDecorations_Override_OVERRIDES FileDecorations_Override_Kind = 0
+	FileDecorations_Override_EXTENDS   FileDecorations_Override_Kind = 1
+)
+
+var FileDecorations_Override_Kind_name = map[int32]string{
+	0: "OVERRIDES",
+	1: "EXTENDS",
+}
+var FileDecorations_Override_Kind_value = map[string]int32{
+	"OVERRIDES": 0,
+	"EXTENDS":   1,
+}
+
+func (x FileDecorations_Override_Kind) String() string {
+	return proto.EnumName(FileDecorations_Override_Kind_name, int32(x))
+}
+func (FileDecorations_Override_Kind) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorServing, []int{11, 1, 0}
+}
+
+type PagedCrossReferences_Feature int32
+
+const (
+	// Related nodes are mixed with related anchors.
+	PagedCrossReferences_RELATED_NODES PagedCrossReferences_Feature = 0
+	// The marked_source field is populated.
+	PagedCrossReferences_MARKED_SOURCE PagedCrossReferences_Feature = 1
+	// Callers are mixed with related anchors.
+	PagedCrossReferences_CALLERS PagedCrossReferences_Feature = 2
+	// Declarations are mixed with related anchors.
+	PagedCrossReferences_DECLARATIONS PagedCrossReferences_Feature = 3
+)
+
+var PagedCrossReferences_Feature_name = map[int32]string{
+	0: "RELATED_NODES",
+	1: "MARKED_SOURCE",
+	2: "CALLERS",
+	3: "DECLARATIONS",
+}
+var PagedCrossReferences_Feature_value = map[string]int32{
+	"RELATED_NODES": 0,
+	"MARKED_SOURCE": 1,
+	"CALLERS":       2,
+	"DECLARATIONS":  3,
+}
+
+func (x PagedCrossReferences_Feature) String() string {
+	return proto.EnumName(PagedCrossReferences_Feature_name, int32(x))
+}
+func (PagedCrossReferences_Feature) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorServing, []int{12, 0}
+}
 
 // A derivative of xref.NodeInfo for serving.
 type Node struct {
 	Ticket string                     `protobuf:"bytes,1,opt,name=ticket,proto3" json:"ticket,omitempty"`
 	Fact   []*kythe_proto_common.Fact `protobuf:"bytes,2,rep,name=fact" json:"fact,omitempty"`
+	// This node's definition location (anchor).
+	DefinitionLocation *ExpandedAnchor `protobuf:"bytes,3,opt,name=definition_location,json=definitionLocation" json:"definition_location,omitempty"`
 }
 
 func (m *Node) Reset()                    { *m = Node{} }
@@ -52,9 +113,23 @@ func (m *Node) String() string            { return proto.CompactTextString(m) }
 func (*Node) ProtoMessage()               {}
 func (*Node) Descriptor() ([]byte, []int) { return fileDescriptorServing, []int{0} }
 
+func (m *Node) GetTicket() string {
+	if m != nil {
+		return m.Ticket
+	}
+	return ""
+}
+
 func (m *Node) GetFact() []*kythe_proto_common.Fact {
 	if m != nil {
 		return m.Fact
+	}
+	return nil
+}
+
+func (m *Node) GetDefinitionLocation() *ExpandedAnchor {
+	if m != nil {
+		return m.DefinitionLocation
 	}
 	return nil
 }
@@ -78,6 +153,20 @@ func (m *Edge) GetSource() *Node {
 		return m.Source
 	}
 	return nil
+}
+
+func (m *Edge) GetKind() string {
+	if m != nil {
+		return m.Kind
+	}
+	return ""
+}
+
+func (m *Edge) GetOrdinal() int32 {
+	if m != nil {
+		return m.Ordinal
+	}
+	return 0
 }
 
 func (m *Edge) GetTarget() *Node {
@@ -107,6 +196,13 @@ func (m *EdgeGroup) String() string            { return proto.CompactTextString(
 func (*EdgeGroup) ProtoMessage()               {}
 func (*EdgeGroup) Descriptor() ([]byte, []int) { return fileDescriptorServing, []int{2} }
 
+func (m *EdgeGroup) GetKind() string {
+	if m != nil {
+		return m.Kind
+	}
+	return ""
+}
+
 func (m *EdgeGroup) GetEdge() []*EdgeGroup_Edge {
 	if m != nil {
 		return m.Edge
@@ -129,6 +225,13 @@ func (m *EdgeGroup_Edge) GetTarget() *Node {
 		return m.Target
 	}
 	return nil
+}
+
+func (m *EdgeGroup_Edge) GetOrdinal() int32 {
+	if m != nil {
+		return m.Ordinal
+	}
+	return 0
 }
 
 // PagedEdgeSets are used for efficiently storing EdgeSets, all originating from
@@ -164,6 +267,13 @@ func (m *PagedEdgeSet) GetGroup() []*EdgeGroup {
 	return nil
 }
 
+func (m *PagedEdgeSet) GetTotalEdges() int32 {
+	if m != nil {
+		return m.TotalEdges
+	}
+	return 0
+}
+
 func (m *PagedEdgeSet) GetPageIndex() []*PageIndex {
 	if m != nil {
 		return m.PageIndex
@@ -188,6 +298,27 @@ func (m *PageIndex) String() string            { return proto.CompactTextString(
 func (*PageIndex) ProtoMessage()               {}
 func (*PageIndex) Descriptor() ([]byte, []int) { return fileDescriptorServing, []int{4} }
 
+func (m *PageIndex) GetEdgeKind() string {
+	if m != nil {
+		return m.EdgeKind
+	}
+	return ""
+}
+
+func (m *PageIndex) GetEdgeCount() int32 {
+	if m != nil {
+		return m.EdgeCount
+	}
+	return 0
+}
+
+func (m *PageIndex) GetPageKey() string {
+	if m != nil {
+		return m.PageKey
+	}
+	return ""
+}
+
 // EdgePages are a group of edges for a particular edge kind and source ticket.
 type EdgePage struct {
 	// Corresponding PageIndex key that can be used to lookup this page.
@@ -200,6 +331,20 @@ func (m *EdgePage) Reset()                    { *m = EdgePage{} }
 func (m *EdgePage) String() string            { return proto.CompactTextString(m) }
 func (*EdgePage) ProtoMessage()               {}
 func (*EdgePage) Descriptor() ([]byte, []int) { return fileDescriptorServing, []int{5} }
+
+func (m *EdgePage) GetPageKey() string {
+	if m != nil {
+		return m.PageKey
+	}
+	return ""
+}
+
+func (m *EdgePage) GetSourceTicket() string {
+	if m != nil {
+		return m.SourceTicket
+	}
+	return ""
+}
 
 func (m *EdgePage) GetEdgesGroup() *EdgeGroup {
 	if m != nil {
@@ -220,6 +365,20 @@ func (m *FileDirectory) Reset()                    { *m = FileDirectory{} }
 func (m *FileDirectory) String() string            { return proto.CompactTextString(m) }
 func (*FileDirectory) ProtoMessage()               {}
 func (*FileDirectory) Descriptor() ([]byte, []int) { return fileDescriptorServing, []int{6} }
+
+func (m *FileDirectory) GetSubdirectory() []string {
+	if m != nil {
+		return m.Subdirectory
+	}
+	return nil
+}
+
+func (m *FileDirectory) GetFileTicket() []string {
+	if m != nil {
+		return m.FileTicket
+	}
+	return nil
+}
 
 // CorpusRoots describes all of the known corpus/root pairs that contain file
 // nodes.
@@ -249,6 +408,20 @@ func (m *CorpusRoots_Corpus) String() string            { return proto.CompactTe
 func (*CorpusRoots_Corpus) ProtoMessage()               {}
 func (*CorpusRoots_Corpus) Descriptor() ([]byte, []int) { return fileDescriptorServing, []int{7, 0} }
 
+func (m *CorpusRoots_Corpus) GetCorpus() string {
+	if m != nil {
+		return m.Corpus
+	}
+	return ""
+}
+
+func (m *CorpusRoots_Corpus) GetRoot() []string {
+	if m != nil {
+		return m.Root
+	}
+	return nil
+}
+
 // A File is a specialized Node structure for file nodes.
 type File struct {
 	Ticket   string `protobuf:"bytes,1,opt,name=ticket,proto3" json:"ticket,omitempty"`
@@ -260,6 +433,27 @@ func (m *File) Reset()                    { *m = File{} }
 func (m *File) String() string            { return proto.CompactTextString(m) }
 func (*File) ProtoMessage()               {}
 func (*File) Descriptor() ([]byte, []int) { return fileDescriptorServing, []int{8} }
+
+func (m *File) GetTicket() string {
+	if m != nil {
+		return m.Ticket
+	}
+	return ""
+}
+
+func (m *File) GetText() []byte {
+	if m != nil {
+		return m.Text
+	}
+	return nil
+}
+
+func (m *File) GetEncoding() string {
+	if m != nil {
+		return m.Encoding
+	}
+	return ""
+}
 
 // A RawAnchor is a specialized Node structure for anchor nodes.
 type RawAnchor struct {
@@ -275,13 +469,47 @@ func (m *RawAnchor) String() string            { return proto.CompactTextString(
 func (*RawAnchor) ProtoMessage()               {}
 func (*RawAnchor) Descriptor() ([]byte, []int) { return fileDescriptorServing, []int{9} }
 
+func (m *RawAnchor) GetTicket() string {
+	if m != nil {
+		return m.Ticket
+	}
+	return ""
+}
+
+func (m *RawAnchor) GetStartOffset() int32 {
+	if m != nil {
+		return m.StartOffset
+	}
+	return 0
+}
+
+func (m *RawAnchor) GetEndOffset() int32 {
+	if m != nil {
+		return m.EndOffset
+	}
+	return 0
+}
+
+func (m *RawAnchor) GetSnippetStart() int32 {
+	if m != nil {
+		return m.SnippetStart
+	}
+	return 0
+}
+
+func (m *RawAnchor) GetSnippetEnd() int32 {
+	if m != nil {
+		return m.SnippetEnd
+	}
+	return 0
+}
+
 // ExpandedAnchors are constructed from an RawAnchor and its associated File.
 // They contain normalized Spans based on their parent file's text as well as
 // the UTF8-encoded text for both the anchor's span and its snippet span.
 type ExpandedAnchor struct {
 	Ticket      string                   `protobuf:"bytes,1,opt,name=ticket,proto3" json:"ticket,omitempty"`
 	Kind        string                   `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
-	Parent      string                   `protobuf:"bytes,3,opt,name=parent,proto3" json:"parent,omitempty"`
 	Text        string                   `protobuf:"bytes,4,opt,name=text,proto3" json:"text,omitempty"`
 	Span        *kythe_proto_common.Span `protobuf:"bytes,5,opt,name=span" json:"span,omitempty"`
 	Snippet     string                   `protobuf:"bytes,6,opt,name=snippet,proto3" json:"snippet,omitempty"`
@@ -293,11 +521,39 @@ func (m *ExpandedAnchor) String() string            { return proto.CompactTextSt
 func (*ExpandedAnchor) ProtoMessage()               {}
 func (*ExpandedAnchor) Descriptor() ([]byte, []int) { return fileDescriptorServing, []int{10} }
 
+func (m *ExpandedAnchor) GetTicket() string {
+	if m != nil {
+		return m.Ticket
+	}
+	return ""
+}
+
+func (m *ExpandedAnchor) GetKind() string {
+	if m != nil {
+		return m.Kind
+	}
+	return ""
+}
+
+func (m *ExpandedAnchor) GetText() string {
+	if m != nil {
+		return m.Text
+	}
+	return ""
+}
+
 func (m *ExpandedAnchor) GetSpan() *kythe_proto_common.Span {
 	if m != nil {
 		return m.Span
 	}
 	return nil
+}
+
+func (m *ExpandedAnchor) GetSnippet() string {
+	if m != nil {
+		return m.Snippet
+	}
+	return ""
 }
 
 func (m *ExpandedAnchor) GetSnippetSpan() *kythe_proto_common.Span {
@@ -312,10 +568,16 @@ type FileDecorations struct {
 	File *File `protobuf:"bytes,1,opt,name=file" json:"file,omitempty"`
 	// The decorations located in the file, sorted by starting offset.
 	Decoration []*FileDecorations_Decoration `protobuf:"bytes,2,rep,name=decoration" json:"decoration,omitempty"`
-	// Set of nodes associated with each Decoration.target.
+	// Set of nodes associated with each Decoration.target and
+	// target_override.overridden.
 	Target []*Node `protobuf:"bytes,4,rep,name=target" json:"target,omitempty"`
-	// Set of definition locations for each Decoration.target.
+	// Set of definition locations for each Decoration.target and
+	// target_override.overridden.
 	TargetDefinitions []*ExpandedAnchor `protobuf:"bytes,3,rep,name=target_definitions,json=targetDefinitions" json:"target_definitions,omitempty"`
+	// List of overrides for target semantic nodes.
+	TargetOverride []*FileDecorations_Override `protobuf:"bytes,5,rep,name=target_override,json=targetOverride" json:"target_override,omitempty"`
+	// List of file diagnostics.
+	Diagnostic []*kythe_proto_common.Diagnostic `protobuf:"bytes,6,rep,name=diagnostic" json:"diagnostic,omitempty"`
 }
 
 func (m *FileDecorations) Reset()                    { *m = FileDecorations{} }
@@ -351,6 +613,20 @@ func (m *FileDecorations) GetTargetDefinitions() []*ExpandedAnchor {
 	return nil
 }
 
+func (m *FileDecorations) GetTargetOverride() []*FileDecorations_Override {
+	if m != nil {
+		return m.TargetOverride
+	}
+	return nil
+}
+
+func (m *FileDecorations) GetDiagnostic() []*kythe_proto_common.Diagnostic {
+	if m != nil {
+		return m.Diagnostic
+	}
+	return nil
+}
+
 // Represents an edge from an anchor contained within the file to some target.
 type FileDecorations_Decoration struct {
 	Anchor           *RawAnchor `protobuf:"bytes,1,opt,name=anchor" json:"anchor,omitempty"`
@@ -373,10 +649,97 @@ func (m *FileDecorations_Decoration) GetAnchor() *RawAnchor {
 	return nil
 }
 
+func (m *FileDecorations_Decoration) GetKind() string {
+	if m != nil {
+		return m.Kind
+	}
+	return ""
+}
+
+func (m *FileDecorations_Decoration) GetTarget() string {
+	if m != nil {
+		return m.Target
+	}
+	return ""
+}
+
+func (m *FileDecorations_Decoration) GetTargetDefinition() string {
+	if m != nil {
+		return m.TargetDefinition
+	}
+	return ""
+}
+
+// An overrides/extends for a defining Decoration's target.
+//
+// Example:
+//   overriding:  "kythe:#java.lang.String"
+//   kind:        EXTENDS
+//   overridden:  "kythe:#java.lang.Object"
+type FileDecorations_Override struct {
+	// Ticket of overriding node (i.e. a Decoration target for a definition)
+	Overriding string `protobuf:"bytes,1,opt,name=overriding,proto3" json:"overriding,omitempty"`
+	// Ticket of node that is being overridden/extended.
+	Overridden           string                        `protobuf:"bytes,2,opt,name=overridden,proto3" json:"overridden,omitempty"`
+	OverriddenDefinition string                        `protobuf:"bytes,5,opt,name=overridden_definition,json=overriddenDefinition,proto3" json:"overridden_definition,omitempty"`
+	Kind                 FileDecorations_Override_Kind `protobuf:"varint,3,opt,name=kind,proto3,enum=kythe.proto.serving.FileDecorations_Override_Kind" json:"kind,omitempty"`
+	// MarkedSource for the node being overridden/extended (i.e. node whose
+	// ticket is overridden).
+	MarkedSource *kythe_proto_common.MarkedSource `protobuf:"bytes,4,opt,name=marked_source,json=markedSource" json:"marked_source,omitempty"`
+}
+
+func (m *FileDecorations_Override) Reset()         { *m = FileDecorations_Override{} }
+func (m *FileDecorations_Override) String() string { return proto.CompactTextString(m) }
+func (*FileDecorations_Override) ProtoMessage()    {}
+func (*FileDecorations_Override) Descriptor() ([]byte, []int) {
+	return fileDescriptorServing, []int{11, 1}
+}
+
+func (m *FileDecorations_Override) GetOverriding() string {
+	if m != nil {
+		return m.Overriding
+	}
+	return ""
+}
+
+func (m *FileDecorations_Override) GetOverridden() string {
+	if m != nil {
+		return m.Overridden
+	}
+	return ""
+}
+
+func (m *FileDecorations_Override) GetOverriddenDefinition() string {
+	if m != nil {
+		return m.OverriddenDefinition
+	}
+	return ""
+}
+
+func (m *FileDecorations_Override) GetKind() FileDecorations_Override_Kind {
+	if m != nil {
+		return m.Kind
+	}
+	return FileDecorations_Override_OVERRIDES
+}
+
+func (m *FileDecorations_Override) GetMarkedSource() *kythe_proto_common.MarkedSource {
+	if m != nil {
+		return m.MarkedSource
+	}
+	return nil
+}
+
 // PagedCrossReferences are used for efficiently storing pre-cached data for
 // CrossReferencesReply.{definition,reference,documentation} anchors.  Related
 // nodes can be retrieved from edge sets/pages.
 type PagedCrossReferences struct {
+	// Set of features implemented by this serving datum.  This tells the server
+	// which data must be computed dynamically.
+	Feature []PagedCrossReferences_Feature `protobuf:"varint,10,rep,packed,name=feature,enum=kythe.proto.serving.PagedCrossReferences_Feature" json:"feature,omitempty"`
+	// Nodes with cross-references that should be merged into this node's set of
+	// cross-references.  These are highly related nodes that share a definition.
+	MergeWith       []string                          `protobuf:"bytes,7,rep,name=merge_with,json=mergeWith" json:"merge_with,omitempty"`
 	SourceTicket    string                            `protobuf:"bytes,1,opt,name=source_ticket,json=sourceTicket,proto3" json:"source_ticket,omitempty"`
 	Group           []*PagedCrossReferences_Group     `protobuf:"bytes,2,rep,name=group" json:"group,omitempty"`
 	PageIndex       []*PagedCrossReferences_PageIndex `protobuf:"bytes,3,rep,name=page_index,json=pageIndex" json:"page_index,omitempty"`
@@ -385,12 +748,35 @@ type PagedCrossReferences struct {
 	// /kythe/edge/defines edges are considered declarations or definitions.
 	// /kythe/edge/completes edges are always grouped as definitions.
 	Incomplete bool `protobuf:"varint,5,opt,name=incomplete,proto3" json:"incomplete,omitempty"`
+	// The source node's MarkedSource.
+	MarkedSource *kythe_proto_common.MarkedSource `protobuf:"bytes,6,opt,name=marked_source,json=markedSource" json:"marked_source,omitempty"`
 }
 
 func (m *PagedCrossReferences) Reset()                    { *m = PagedCrossReferences{} }
 func (m *PagedCrossReferences) String() string            { return proto.CompactTextString(m) }
 func (*PagedCrossReferences) ProtoMessage()               {}
 func (*PagedCrossReferences) Descriptor() ([]byte, []int) { return fileDescriptorServing, []int{12} }
+
+func (m *PagedCrossReferences) GetFeature() []PagedCrossReferences_Feature {
+	if m != nil {
+		return m.Feature
+	}
+	return nil
+}
+
+func (m *PagedCrossReferences) GetMergeWith() []string {
+	if m != nil {
+		return m.MergeWith
+	}
+	return nil
+}
+
+func (m *PagedCrossReferences) GetSourceTicket() string {
+	if m != nil {
+		return m.SourceTicket
+	}
+	return ""
+}
 
 func (m *PagedCrossReferences) GetGroup() []*PagedCrossReferences_Group {
 	if m != nil {
@@ -406,21 +792,142 @@ func (m *PagedCrossReferences) GetPageIndex() []*PagedCrossReferences_PageIndex 
 	return nil
 }
 
+func (m *PagedCrossReferences) GetTotalReferences() int32 {
+	if m != nil {
+		return m.TotalReferences
+	}
+	return 0
+}
+
+func (m *PagedCrossReferences) GetIncomplete() bool {
+	if m != nil {
+		return m.Incomplete
+	}
+	return false
+}
+
+func (m *PagedCrossReferences) GetMarkedSource() *kythe_proto_common.MarkedSource {
+	if m != nil {
+		return m.MarkedSource
+	}
+	return nil
+}
+
+// Node which is related to the source_ticket node.  The relation kind is
+// stored in each Group.  See: kythe.proto.CrossReferencesReply.RelatedNode.
+type PagedCrossReferences_RelatedNode struct {
+	Node    *Node `protobuf:"bytes,1,opt,name=node" json:"node,omitempty"`
+	Ordinal int32 `protobuf:"varint,2,opt,name=ordinal,proto3" json:"ordinal,omitempty"`
+}
+
+func (m *PagedCrossReferences_RelatedNode) Reset()         { *m = PagedCrossReferences_RelatedNode{} }
+func (m *PagedCrossReferences_RelatedNode) String() string { return proto.CompactTextString(m) }
+func (*PagedCrossReferences_RelatedNode) ProtoMessage()    {}
+func (*PagedCrossReferences_RelatedNode) Descriptor() ([]byte, []int) {
+	return fileDescriptorServing, []int{12, 0}
+}
+
+func (m *PagedCrossReferences_RelatedNode) GetNode() *Node {
+	if m != nil {
+		return m.Node
+	}
+	return nil
+}
+
+func (m *PagedCrossReferences_RelatedNode) GetOrdinal() int32 {
+	if m != nil {
+		return m.Ordinal
+	}
+	return 0
+}
+
+// Caller of the source node with all associated callsites within the caller.
+type PagedCrossReferences_Caller struct {
+	// The anchor covering the caller.
+	Caller *ExpandedAnchor `protobuf:"bytes,1,opt,name=caller" json:"caller,omitempty"`
+	// The relevant semantic ticket for the caller.
+	SemanticCaller string `protobuf:"bytes,2,opt,name=semantic_caller,json=semanticCaller,proto3" json:"semantic_caller,omitempty"`
+	// MarkedSource for the caller.
+	MarkedSource *kythe_proto_common.MarkedSource `protobuf:"bytes,3,opt,name=marked_source,json=markedSource" json:"marked_source,omitempty"`
+	// Specific locations within the caller that caused the relationship to
+	// exist.
+	Callsite []*ExpandedAnchor `protobuf:"bytes,4,rep,name=callsite" json:"callsite,omitempty"`
+}
+
+func (m *PagedCrossReferences_Caller) Reset()         { *m = PagedCrossReferences_Caller{} }
+func (m *PagedCrossReferences_Caller) String() string { return proto.CompactTextString(m) }
+func (*PagedCrossReferences_Caller) ProtoMessage()    {}
+func (*PagedCrossReferences_Caller) Descriptor() ([]byte, []int) {
+	return fileDescriptorServing, []int{12, 1}
+}
+
+func (m *PagedCrossReferences_Caller) GetCaller() *ExpandedAnchor {
+	if m != nil {
+		return m.Caller
+	}
+	return nil
+}
+
+func (m *PagedCrossReferences_Caller) GetSemanticCaller() string {
+	if m != nil {
+		return m.SemanticCaller
+	}
+	return ""
+}
+
+func (m *PagedCrossReferences_Caller) GetMarkedSource() *kythe_proto_common.MarkedSource {
+	if m != nil {
+		return m.MarkedSource
+	}
+	return nil
+}
+
+func (m *PagedCrossReferences_Caller) GetCallsite() []*ExpandedAnchor {
+	if m != nil {
+		return m.Callsite
+	}
+	return nil
+}
+
 type PagedCrossReferences_Group struct {
-	Kind   string            `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
-	Anchor []*ExpandedAnchor `protobuf:"bytes,2,rep,name=anchor" json:"anchor,omitempty"`
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// A group is composed entirely of anchors, related nodes, or callers.
+	Anchor      []*ExpandedAnchor                   `protobuf:"bytes,2,rep,name=anchor" json:"anchor,omitempty"`
+	RelatedNode []*PagedCrossReferences_RelatedNode `protobuf:"bytes,3,rep,name=related_node,json=relatedNode" json:"related_node,omitempty"`
+	Caller      []*PagedCrossReferences_Caller      `protobuf:"bytes,4,rep,name=caller" json:"caller,omitempty"`
 }
 
 func (m *PagedCrossReferences_Group) Reset()         { *m = PagedCrossReferences_Group{} }
 func (m *PagedCrossReferences_Group) String() string { return proto.CompactTextString(m) }
 func (*PagedCrossReferences_Group) ProtoMessage()    {}
 func (*PagedCrossReferences_Group) Descriptor() ([]byte, []int) {
-	return fileDescriptorServing, []int{12, 0}
+	return fileDescriptorServing, []int{12, 2}
+}
+
+func (m *PagedCrossReferences_Group) GetKind() string {
+	if m != nil {
+		return m.Kind
+	}
+	return ""
 }
 
 func (m *PagedCrossReferences_Group) GetAnchor() []*ExpandedAnchor {
 	if m != nil {
 		return m.Anchor
+	}
+	return nil
+}
+
+func (m *PagedCrossReferences_Group) GetRelatedNode() []*PagedCrossReferences_RelatedNode {
+	if m != nil {
+		return m.RelatedNode
+	}
+	return nil
+}
+
+func (m *PagedCrossReferences_Group) GetCaller() []*PagedCrossReferences_Caller {
+	if m != nil {
+		return m.Caller
 	}
 	return nil
 }
@@ -435,7 +942,21 @@ func (m *PagedCrossReferences_Page) Reset()         { *m = PagedCrossReferences_
 func (m *PagedCrossReferences_Page) String() string { return proto.CompactTextString(m) }
 func (*PagedCrossReferences_Page) ProtoMessage()    {}
 func (*PagedCrossReferences_Page) Descriptor() ([]byte, []int) {
-	return fileDescriptorServing, []int{12, 1}
+	return fileDescriptorServing, []int{12, 3}
+}
+
+func (m *PagedCrossReferences_Page) GetPageKey() string {
+	if m != nil {
+		return m.PageKey
+	}
+	return ""
+}
+
+func (m *PagedCrossReferences_Page) GetSourceTicket() string {
+	if m != nil {
+		return m.SourceTicket
+	}
+	return ""
 }
 
 func (m *PagedCrossReferences_Page) GetGroup() *PagedCrossReferences_Group {
@@ -456,7 +977,28 @@ func (m *PagedCrossReferences_PageIndex) Reset()         { *m = PagedCrossRefere
 func (m *PagedCrossReferences_PageIndex) String() string { return proto.CompactTextString(m) }
 func (*PagedCrossReferences_PageIndex) ProtoMessage()    {}
 func (*PagedCrossReferences_PageIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptorServing, []int{12, 2}
+	return fileDescriptorServing, []int{12, 4}
+}
+
+func (m *PagedCrossReferences_PageIndex) GetKind() string {
+	if m != nil {
+		return m.Kind
+	}
+	return ""
+}
+
+func (m *PagedCrossReferences_PageIndex) GetCount() int32 {
+	if m != nil {
+		return m.Count
+	}
+	return 0
+}
+
+func (m *PagedCrossReferences_PageIndex) GetPageKey() string {
+	if m != nil {
+		return m.PageKey
+	}
+	return ""
 }
 
 func init() {
@@ -475,208 +1017,223 @@ func init() {
 	proto.RegisterType((*ExpandedAnchor)(nil), "kythe.proto.serving.ExpandedAnchor")
 	proto.RegisterType((*FileDecorations)(nil), "kythe.proto.serving.FileDecorations")
 	proto.RegisterType((*FileDecorations_Decoration)(nil), "kythe.proto.serving.FileDecorations.Decoration")
+	proto.RegisterType((*FileDecorations_Override)(nil), "kythe.proto.serving.FileDecorations.Override")
 	proto.RegisterType((*PagedCrossReferences)(nil), "kythe.proto.serving.PagedCrossReferences")
+	proto.RegisterType((*PagedCrossReferences_RelatedNode)(nil), "kythe.proto.serving.PagedCrossReferences.RelatedNode")
+	proto.RegisterType((*PagedCrossReferences_Caller)(nil), "kythe.proto.serving.PagedCrossReferences.Caller")
 	proto.RegisterType((*PagedCrossReferences_Group)(nil), "kythe.proto.serving.PagedCrossReferences.Group")
 	proto.RegisterType((*PagedCrossReferences_Page)(nil), "kythe.proto.serving.PagedCrossReferences.Page")
 	proto.RegisterType((*PagedCrossReferences_PageIndex)(nil), "kythe.proto.serving.PagedCrossReferences.PageIndex")
+	proto.RegisterEnum("kythe.proto.serving.FileDecorations_Override_Kind", FileDecorations_Override_Kind_name, FileDecorations_Override_Kind_value)
+	proto.RegisterEnum("kythe.proto.serving.PagedCrossReferences_Feature", PagedCrossReferences_Feature_name, PagedCrossReferences_Feature_value)
 }
-func (m *Node) Marshal() (data []byte, err error) {
+func (m *Node) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Node) MarshalTo(data []byte) (int, error) {
+func (m *Node) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ticket) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Ticket)))
-		i += copy(data[i:], m.Ticket)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Ticket)))
+		i += copy(dAtA[i:], m.Ticket)
 	}
 	if len(m.Fact) > 0 {
 		for _, msg := range m.Fact {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
 			i += n
 		}
 	}
-	return i, nil
-}
-
-func (m *Edge) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Edge) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Source != nil {
-		data[i] = 0xa
+	if m.DefinitionLocation != nil {
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintServing(data, i, uint64(m.Source.Size()))
-		n1, err := m.Source.MarshalTo(data[i:])
+		i = encodeVarintServing(dAtA, i, uint64(m.DefinitionLocation.Size()))
+		n1, err := m.DefinitionLocation.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n1
 	}
-	if len(m.Kind) > 0 {
-		data[i] = 0x12
-		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Kind)))
-		i += copy(data[i:], m.Kind)
-	}
-	if m.Target != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintServing(data, i, uint64(m.Target.Size()))
-		n2, err := m.Target.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
-	}
-	if len(m.Fact) > 0 {
-		for _, msg := range m.Fact {
-			data[i] = 0x22
-			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	if m.Ordinal != 0 {
-		data[i] = 0x28
-		i++
-		i = encodeVarintServing(data, i, uint64(m.Ordinal))
-	}
 	return i, nil
 }
 
-func (m *EdgeGroup) Marshal() (data []byte, err error) {
+func (m *Edge) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *EdgeGroup) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Kind) > 0 {
-		data[i] = 0xa
-		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Kind)))
-		i += copy(data[i:], m.Kind)
-	}
-	if len(m.Edge) > 0 {
-		for _, msg := range m.Edge {
-			data[i] = 0x12
-			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func (m *EdgeGroup_Edge) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *EdgeGroup_Edge) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Target != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintServing(data, i, uint64(m.Target.Size()))
-		n3, err := m.Target.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
-	}
-	if m.Ordinal != 0 {
-		data[i] = 0x10
-		i++
-		i = encodeVarintServing(data, i, uint64(m.Ordinal))
-	}
-	return i, nil
-}
-
-func (m *PagedEdgeSet) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *PagedEdgeSet) MarshalTo(data []byte) (int, error) {
+func (m *Edge) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Source != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(m.Source.Size()))
-		n4, err := m.Source.MarshalTo(data[i:])
+		i = encodeVarintServing(dAtA, i, uint64(m.Source.Size()))
+		n2, err := m.Source.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n2
+	}
+	if len(m.Kind) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Kind)))
+		i += copy(dAtA[i:], m.Kind)
+	}
+	if m.Target != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.Target.Size()))
+		n3, err := m.Target.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	if len(m.Fact) > 0 {
+		for _, msg := range m.Fact {
+			dAtA[i] = 0x22
+			i++
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.Ordinal != 0 {
+		dAtA[i] = 0x28
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.Ordinal))
+	}
+	return i, nil
+}
+
+func (m *EdgeGroup) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *EdgeGroup) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Kind) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Kind)))
+		i += copy(dAtA[i:], m.Kind)
+	}
+	if len(m.Edge) > 0 {
+		for _, msg := range m.Edge {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *EdgeGroup_Edge) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *EdgeGroup_Edge) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Target != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.Target.Size()))
+		n4, err := m.Target.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n4
 	}
+	if m.Ordinal != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.Ordinal))
+	}
+	return i, nil
+}
+
+func (m *PagedEdgeSet) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PagedEdgeSet) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Source != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.Source.Size()))
+		n5, err := m.Source.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n5
+	}
 	if len(m.Group) > 0 {
 		for _, msg := range m.Group {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -684,16 +1241,16 @@ func (m *PagedEdgeSet) MarshalTo(data []byte) (int, error) {
 		}
 	}
 	if m.TotalEdges != 0 {
-		data[i] = 0x18
+		dAtA[i] = 0x18
 		i++
-		i = encodeVarintServing(data, i, uint64(m.TotalEdges))
+		i = encodeVarintServing(dAtA, i, uint64(m.TotalEdges))
 	}
 	if len(m.PageIndex) > 0 {
 		for _, msg := range m.PageIndex {
-			data[i] = 0x22
+			dAtA[i] = 0x22
 			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -703,150 +1260,150 @@ func (m *PagedEdgeSet) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *PageIndex) Marshal() (data []byte, err error) {
+func (m *PageIndex) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *PageIndex) MarshalTo(data []byte) (int, error) {
+func (m *PageIndex) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.EdgeKind) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.EdgeKind)))
-		i += copy(data[i:], m.EdgeKind)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.EdgeKind)))
+		i += copy(dAtA[i:], m.EdgeKind)
 	}
 	if m.EdgeCount != 0 {
-		data[i] = 0x10
+		dAtA[i] = 0x10
 		i++
-		i = encodeVarintServing(data, i, uint64(m.EdgeCount))
+		i = encodeVarintServing(dAtA, i, uint64(m.EdgeCount))
 	}
 	if len(m.PageKey) > 0 {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.PageKey)))
-		i += copy(data[i:], m.PageKey)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.PageKey)))
+		i += copy(dAtA[i:], m.PageKey)
 	}
 	return i, nil
 }
 
-func (m *EdgePage) Marshal() (data []byte, err error) {
+func (m *EdgePage) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *EdgePage) MarshalTo(data []byte) (int, error) {
+func (m *EdgePage) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.PageKey) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.PageKey)))
-		i += copy(data[i:], m.PageKey)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.PageKey)))
+		i += copy(dAtA[i:], m.PageKey)
 	}
 	if len(m.SourceTicket) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.SourceTicket)))
-		i += copy(data[i:], m.SourceTicket)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.SourceTicket)))
+		i += copy(dAtA[i:], m.SourceTicket)
 	}
 	if m.EdgesGroup != nil {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintServing(data, i, uint64(m.EdgesGroup.Size()))
-		n5, err := m.EdgesGroup.MarshalTo(data[i:])
+		i = encodeVarintServing(dAtA, i, uint64(m.EdgesGroup.Size()))
+		n6, err := m.EdgesGroup.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n5
+		i += n6
 	}
 	return i, nil
 }
 
-func (m *FileDirectory) Marshal() (data []byte, err error) {
+func (m *FileDirectory) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *FileDirectory) MarshalTo(data []byte) (int, error) {
+func (m *FileDirectory) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Subdirectory) > 0 {
 		for _, s := range m.Subdirectory {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	if len(m.FileTicket) > 0 {
 		for _, s := range m.FileTicket {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	return i, nil
 }
 
-func (m *CorpusRoots) Marshal() (data []byte, err error) {
+func (m *CorpusRoots) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *CorpusRoots) MarshalTo(data []byte) (int, error) {
+func (m *CorpusRoots) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Corpus) > 0 {
 		for _, msg := range m.Corpus {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -856,224 +1413,218 @@ func (m *CorpusRoots) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *CorpusRoots_Corpus) Marshal() (data []byte, err error) {
+func (m *CorpusRoots_Corpus) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *CorpusRoots_Corpus) MarshalTo(data []byte) (int, error) {
+func (m *CorpusRoots_Corpus) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Corpus) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Corpus)))
-		i += copy(data[i:], m.Corpus)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Corpus)))
+		i += copy(dAtA[i:], m.Corpus)
 	}
 	if len(m.Root) > 0 {
 		for _, s := range m.Root {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	return i, nil
 }
 
-func (m *File) Marshal() (data []byte, err error) {
+func (m *File) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *File) MarshalTo(data []byte) (int, error) {
+func (m *File) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ticket) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Ticket)))
-		i += copy(data[i:], m.Ticket)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Ticket)))
+		i += copy(dAtA[i:], m.Ticket)
 	}
 	if len(m.Text) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Text)))
-		i += copy(data[i:], m.Text)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Text)))
+		i += copy(dAtA[i:], m.Text)
 	}
 	if len(m.Encoding) > 0 {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Encoding)))
-		i += copy(data[i:], m.Encoding)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Encoding)))
+		i += copy(dAtA[i:], m.Encoding)
 	}
 	return i, nil
 }
 
-func (m *RawAnchor) Marshal() (data []byte, err error) {
+func (m *RawAnchor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *RawAnchor) MarshalTo(data []byte) (int, error) {
+func (m *RawAnchor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ticket) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Ticket)))
-		i += copy(data[i:], m.Ticket)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Ticket)))
+		i += copy(dAtA[i:], m.Ticket)
 	}
 	if m.StartOffset != 0 {
-		data[i] = 0x10
+		dAtA[i] = 0x10
 		i++
-		i = encodeVarintServing(data, i, uint64(m.StartOffset))
+		i = encodeVarintServing(dAtA, i, uint64(m.StartOffset))
 	}
 	if m.EndOffset != 0 {
-		data[i] = 0x18
+		dAtA[i] = 0x18
 		i++
-		i = encodeVarintServing(data, i, uint64(m.EndOffset))
+		i = encodeVarintServing(dAtA, i, uint64(m.EndOffset))
 	}
 	if m.SnippetStart != 0 {
-		data[i] = 0x20
+		dAtA[i] = 0x20
 		i++
-		i = encodeVarintServing(data, i, uint64(m.SnippetStart))
+		i = encodeVarintServing(dAtA, i, uint64(m.SnippetStart))
 	}
 	if m.SnippetEnd != 0 {
-		data[i] = 0x28
+		dAtA[i] = 0x28
 		i++
-		i = encodeVarintServing(data, i, uint64(m.SnippetEnd))
+		i = encodeVarintServing(dAtA, i, uint64(m.SnippetEnd))
 	}
 	return i, nil
 }
 
-func (m *ExpandedAnchor) Marshal() (data []byte, err error) {
+func (m *ExpandedAnchor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *ExpandedAnchor) MarshalTo(data []byte) (int, error) {
+func (m *ExpandedAnchor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ticket) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Ticket)))
-		i += copy(data[i:], m.Ticket)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Ticket)))
+		i += copy(dAtA[i:], m.Ticket)
 	}
 	if len(m.Kind) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Kind)))
-		i += copy(data[i:], m.Kind)
-	}
-	if len(m.Parent) > 0 {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Parent)))
-		i += copy(data[i:], m.Parent)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Kind)))
+		i += copy(dAtA[i:], m.Kind)
 	}
 	if len(m.Text) > 0 {
-		data[i] = 0x22
+		dAtA[i] = 0x22
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Text)))
-		i += copy(data[i:], m.Text)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Text)))
+		i += copy(dAtA[i:], m.Text)
 	}
 	if m.Span != nil {
-		data[i] = 0x2a
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintServing(data, i, uint64(m.Span.Size()))
-		n6, err := m.Span.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n6
-	}
-	if len(m.Snippet) > 0 {
-		data[i] = 0x32
-		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Snippet)))
-		i += copy(data[i:], m.Snippet)
-	}
-	if m.SnippetSpan != nil {
-		data[i] = 0x3a
-		i++
-		i = encodeVarintServing(data, i, uint64(m.SnippetSpan.Size()))
-		n7, err := m.SnippetSpan.MarshalTo(data[i:])
+		i = encodeVarintServing(dAtA, i, uint64(m.Span.Size()))
+		n7, err := m.Span.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n7
 	}
-	return i, nil
-}
-
-func (m *FileDecorations) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *FileDecorations) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.File != nil {
-		data[i] = 0xa
+	if len(m.Snippet) > 0 {
+		dAtA[i] = 0x32
 		i++
-		i = encodeVarintServing(data, i, uint64(m.File.Size()))
-		n8, err := m.File.MarshalTo(data[i:])
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Snippet)))
+		i += copy(dAtA[i:], m.Snippet)
+	}
+	if m.SnippetSpan != nil {
+		dAtA[i] = 0x3a
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.SnippetSpan.Size()))
+		n8, err := m.SnippetSpan.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n8
 	}
+	return i, nil
+}
+
+func (m *FileDecorations) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *FileDecorations) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.File != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.File.Size()))
+		n9, err := m.File.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n9
+	}
 	if len(m.Decoration) > 0 {
 		for _, msg := range m.Decoration {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1082,10 +1633,10 @@ func (m *FileDecorations) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.TargetDefinitions) > 0 {
 		for _, msg := range m.TargetDefinitions {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1094,10 +1645,34 @@ func (m *FileDecorations) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.Target) > 0 {
 		for _, msg := range m.Target {
-			data[i] = 0x22
+			dAtA[i] = 0x22
 			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.TargetOverride) > 0 {
+		for _, msg := range m.TargetOverride {
+			dAtA[i] = 0x2a
+			i++
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Diagnostic) > 0 {
+		for _, msg := range m.Diagnostic {
+			dAtA[i] = 0x32
+			i++
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1107,79 +1682,130 @@ func (m *FileDecorations) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *FileDecorations_Decoration) Marshal() (data []byte, err error) {
+func (m *FileDecorations_Decoration) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *FileDecorations_Decoration) MarshalTo(data []byte) (int, error) {
+func (m *FileDecorations_Decoration) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Anchor != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(m.Anchor.Size()))
-		n9, err := m.Anchor.MarshalTo(data[i:])
+		i = encodeVarintServing(dAtA, i, uint64(m.Anchor.Size()))
+		n10, err := m.Anchor.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n9
+		i += n10
 	}
 	if len(m.Kind) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Kind)))
-		i += copy(data[i:], m.Kind)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Kind)))
+		i += copy(dAtA[i:], m.Kind)
 	}
 	if len(m.TargetDefinition) > 0 {
-		data[i] = 0x22
+		dAtA[i] = 0x22
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.TargetDefinition)))
-		i += copy(data[i:], m.TargetDefinition)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.TargetDefinition)))
+		i += copy(dAtA[i:], m.TargetDefinition)
 	}
 	if len(m.Target) > 0 {
-		data[i] = 0x2a
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Target)))
-		i += copy(data[i:], m.Target)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Target)))
+		i += copy(dAtA[i:], m.Target)
 	}
 	return i, nil
 }
 
-func (m *PagedCrossReferences) Marshal() (data []byte, err error) {
+func (m *FileDecorations_Override) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *PagedCrossReferences) MarshalTo(data []byte) (int, error) {
+func (m *FileDecorations_Override) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Overriding) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Overriding)))
+		i += copy(dAtA[i:], m.Overriding)
+	}
+	if len(m.Overridden) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Overridden)))
+		i += copy(dAtA[i:], m.Overridden)
+	}
+	if m.Kind != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.Kind))
+	}
+	if m.MarkedSource != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.MarkedSource.Size()))
+		n11, err := m.MarkedSource.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n11
+	}
+	if len(m.OverriddenDefinition) > 0 {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(len(m.OverriddenDefinition)))
+		i += copy(dAtA[i:], m.OverriddenDefinition)
+	}
+	return i, nil
+}
+
+func (m *PagedCrossReferences) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PagedCrossReferences) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.SourceTicket) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.SourceTicket)))
-		i += copy(data[i:], m.SourceTicket)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.SourceTicket)))
+		i += copy(dAtA[i:], m.SourceTicket)
 	}
 	if len(m.Group) > 0 {
 		for _, msg := range m.Group {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1188,10 +1814,10 @@ func (m *PagedCrossReferences) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.PageIndex) > 0 {
 		for _, msg := range m.PageIndex {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1199,50 +1825,145 @@ func (m *PagedCrossReferences) MarshalTo(data []byte) (int, error) {
 		}
 	}
 	if m.TotalReferences != 0 {
-		data[i] = 0x20
+		dAtA[i] = 0x20
 		i++
-		i = encodeVarintServing(data, i, uint64(m.TotalReferences))
+		i = encodeVarintServing(dAtA, i, uint64(m.TotalReferences))
 	}
 	if m.Incomplete {
-		data[i] = 0x28
+		dAtA[i] = 0x28
 		i++
 		if m.Incomplete {
-			data[i] = 1
+			dAtA[i] = 1
 		} else {
-			data[i] = 0
+			dAtA[i] = 0
 		}
 		i++
+	}
+	if m.MarkedSource != nil {
+		dAtA[i] = 0x32
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.MarkedSource.Size()))
+		n12, err := m.MarkedSource.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n12
+	}
+	if len(m.MergeWith) > 0 {
+		for _, s := range m.MergeWith {
+			dAtA[i] = 0x3a
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			dAtA[i] = uint8(l)
+			i++
+			i += copy(dAtA[i:], s)
+		}
+	}
+	if len(m.Feature) > 0 {
+		dAtA14 := make([]byte, len(m.Feature)*10)
+		var j13 int
+		for _, num := range m.Feature {
+			for num >= 1<<7 {
+				dAtA14[j13] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j13++
+			}
+			dAtA14[j13] = uint8(num)
+			j13++
+		}
+		dAtA[i] = 0x52
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(j13))
+		i += copy(dAtA[i:], dAtA14[:j13])
 	}
 	return i, nil
 }
 
-func (m *PagedCrossReferences_Group) Marshal() (data []byte, err error) {
+func (m *PagedCrossReferences_RelatedNode) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *PagedCrossReferences_Group) MarshalTo(data []byte) (int, error) {
+func (m *PagedCrossReferences_RelatedNode) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	if len(m.Kind) > 0 {
-		data[i] = 0xa
+	if m.Node != nil {
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Kind)))
-		i += copy(data[i:], m.Kind)
+		i = encodeVarintServing(dAtA, i, uint64(m.Node.Size()))
+		n15, err := m.Node.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n15
 	}
-	if len(m.Anchor) > 0 {
-		for _, msg := range m.Anchor {
-			data[i] = 0x12
+	if m.Ordinal != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.Ordinal))
+	}
+	return i, nil
+}
+
+func (m *PagedCrossReferences_Caller) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PagedCrossReferences_Caller) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Caller != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.Caller.Size()))
+		n16, err := m.Caller.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n16
+	}
+	if len(m.SemanticCaller) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(len(m.SemanticCaller)))
+		i += copy(dAtA[i:], m.SemanticCaller)
+	}
+	if m.MarkedSource != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.MarkedSource.Size()))
+		n17, err := m.MarkedSource.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n17
+	}
+	if len(m.Callsite) > 0 {
+		for _, msg := range m.Callsite {
+			dAtA[i] = 0x22
 			i++
-			i = encodeVarintServing(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1252,106 +1973,166 @@ func (m *PagedCrossReferences_Group) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *PagedCrossReferences_Page) Marshal() (data []byte, err error) {
+func (m *PagedCrossReferences_Group) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *PagedCrossReferences_Page) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.PageKey) > 0 {
-		data[i] = 0xa
-		i++
-		i = encodeVarintServing(data, i, uint64(len(m.PageKey)))
-		i += copy(data[i:], m.PageKey)
-	}
-	if len(m.SourceTicket) > 0 {
-		data[i] = 0x12
-		i++
-		i = encodeVarintServing(data, i, uint64(len(m.SourceTicket)))
-		i += copy(data[i:], m.SourceTicket)
-	}
-	if m.Group != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintServing(data, i, uint64(m.Group.Size()))
-		n10, err := m.Group.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n10
-	}
-	return i, nil
-}
-
-func (m *PagedCrossReferences_PageIndex) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *PagedCrossReferences_PageIndex) MarshalTo(data []byte) (int, error) {
+func (m *PagedCrossReferences_Group) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Kind) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintServing(data, i, uint64(len(m.Kind)))
-		i += copy(data[i:], m.Kind)
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Kind)))
+		i += copy(dAtA[i:], m.Kind)
 	}
-	if m.Count != 0 {
-		data[i] = 0x10
-		i++
-		i = encodeVarintServing(data, i, uint64(m.Count))
+	if len(m.Anchor) > 0 {
+		for _, msg := range m.Anchor {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
-	if len(m.PageKey) > 0 {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintServing(data, i, uint64(len(m.PageKey)))
-		i += copy(data[i:], m.PageKey)
+	if len(m.RelatedNode) > 0 {
+		for _, msg := range m.RelatedNode {
+			dAtA[i] = 0x1a
+			i++
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Caller) > 0 {
+		for _, msg := range m.Caller {
+			dAtA[i] = 0x22
+			i++
+			i = encodeVarintServing(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
 	return i, nil
 }
 
-func encodeFixed64Serving(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func (m *PagedCrossReferences_Page) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PagedCrossReferences_Page) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.PageKey) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(len(m.PageKey)))
+		i += copy(dAtA[i:], m.PageKey)
+	}
+	if len(m.SourceTicket) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(len(m.SourceTicket)))
+		i += copy(dAtA[i:], m.SourceTicket)
+	}
+	if m.Group != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.Group.Size()))
+		n18, err := m.Group.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n18
+	}
+	return i, nil
+}
+
+func (m *PagedCrossReferences_PageIndex) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PagedCrossReferences_PageIndex) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Kind) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(len(m.Kind)))
+		i += copy(dAtA[i:], m.Kind)
+	}
+	if m.Count != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(m.Count))
+	}
+	if len(m.PageKey) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintServing(dAtA, i, uint64(len(m.PageKey)))
+		i += copy(dAtA[i:], m.PageKey)
+	}
+	return i, nil
+}
+
+func encodeFixed64Serving(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Serving(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Serving(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintServing(data []byte, offset int, v uint64) int {
+func encodeVarintServing(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *Node) Size() (n int) {
@@ -1366,6 +2147,10 @@ func (m *Node) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovServing(uint64(l))
 		}
+	}
+	if m.DefinitionLocation != nil {
+		l = m.DefinitionLocation.Size()
+		n += 1 + l + sovServing(uint64(l))
 	}
 	return n
 }
@@ -1583,10 +2368,6 @@ func (m *ExpandedAnchor) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovServing(uint64(l))
 	}
-	l = len(m.Parent)
-	if l > 0 {
-		n += 1 + l + sovServing(uint64(l))
-	}
 	l = len(m.Text)
 	if l > 0 {
 		n += 1 + l + sovServing(uint64(l))
@@ -1631,6 +2412,18 @@ func (m *FileDecorations) Size() (n int) {
 			n += 1 + l + sovServing(uint64(l))
 		}
 	}
+	if len(m.TargetOverride) > 0 {
+		for _, e := range m.TargetOverride {
+			l = e.Size()
+			n += 1 + l + sovServing(uint64(l))
+		}
+	}
+	if len(m.Diagnostic) > 0 {
+		for _, e := range m.Diagnostic {
+			l = e.Size()
+			n += 1 + l + sovServing(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -1650,6 +2443,31 @@ func (m *FileDecorations_Decoration) Size() (n int) {
 		n += 1 + l + sovServing(uint64(l))
 	}
 	l = len(m.Target)
+	if l > 0 {
+		n += 1 + l + sovServing(uint64(l))
+	}
+	return n
+}
+
+func (m *FileDecorations_Override) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Overriding)
+	if l > 0 {
+		n += 1 + l + sovServing(uint64(l))
+	}
+	l = len(m.Overridden)
+	if l > 0 {
+		n += 1 + l + sovServing(uint64(l))
+	}
+	if m.Kind != 0 {
+		n += 1 + sovServing(uint64(m.Kind))
+	}
+	if m.MarkedSource != nil {
+		l = m.MarkedSource.Size()
+		n += 1 + l + sovServing(uint64(l))
+	}
+	l = len(m.OverriddenDefinition)
 	if l > 0 {
 		n += 1 + l + sovServing(uint64(l))
 	}
@@ -1681,6 +2499,60 @@ func (m *PagedCrossReferences) Size() (n int) {
 	if m.Incomplete {
 		n += 2
 	}
+	if m.MarkedSource != nil {
+		l = m.MarkedSource.Size()
+		n += 1 + l + sovServing(uint64(l))
+	}
+	if len(m.MergeWith) > 0 {
+		for _, s := range m.MergeWith {
+			l = len(s)
+			n += 1 + l + sovServing(uint64(l))
+		}
+	}
+	if len(m.Feature) > 0 {
+		l = 0
+		for _, e := range m.Feature {
+			l += sovServing(uint64(e))
+		}
+		n += 1 + sovServing(uint64(l)) + l
+	}
+	return n
+}
+
+func (m *PagedCrossReferences_RelatedNode) Size() (n int) {
+	var l int
+	_ = l
+	if m.Node != nil {
+		l = m.Node.Size()
+		n += 1 + l + sovServing(uint64(l))
+	}
+	if m.Ordinal != 0 {
+		n += 1 + sovServing(uint64(m.Ordinal))
+	}
+	return n
+}
+
+func (m *PagedCrossReferences_Caller) Size() (n int) {
+	var l int
+	_ = l
+	if m.Caller != nil {
+		l = m.Caller.Size()
+		n += 1 + l + sovServing(uint64(l))
+	}
+	l = len(m.SemanticCaller)
+	if l > 0 {
+		n += 1 + l + sovServing(uint64(l))
+	}
+	if m.MarkedSource != nil {
+		l = m.MarkedSource.Size()
+		n += 1 + l + sovServing(uint64(l))
+	}
+	if len(m.Callsite) > 0 {
+		for _, e := range m.Callsite {
+			l = e.Size()
+			n += 1 + l + sovServing(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -1693,6 +2565,18 @@ func (m *PagedCrossReferences_Group) Size() (n int) {
 	}
 	if len(m.Anchor) > 0 {
 		for _, e := range m.Anchor {
+			l = e.Size()
+			n += 1 + l + sovServing(uint64(l))
+		}
+	}
+	if len(m.RelatedNode) > 0 {
+		for _, e := range m.RelatedNode {
+			l = e.Size()
+			n += 1 + l + sovServing(uint64(l))
+		}
+	}
+	if len(m.Caller) > 0 {
+		for _, e := range m.Caller {
 			l = e.Size()
 			n += 1 + l + sovServing(uint64(l))
 		}
@@ -1748,8 +2632,8 @@ func sovServing(x uint64) (n int) {
 func sozServing(x uint64) (n int) {
 	return sovServing(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *Node) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Node) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1761,7 +2645,7 @@ func (m *Node) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1789,7 +2673,7 @@ func (m *Node) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1804,7 +2688,7 @@ func (m *Node) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = string(data[iNdEx:postIndex])
+			m.Ticket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -1818,7 +2702,7 @@ func (m *Node) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1833,13 +2717,46 @@ func (m *Node) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Fact = append(m.Fact, &kythe_proto_common.Fact{})
-			if err := m.Fact[len(m.Fact)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Fact[len(m.Fact)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DefinitionLocation", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.DefinitionLocation == nil {
+				m.DefinitionLocation = &ExpandedAnchor{}
+			}
+			if err := m.DefinitionLocation.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1858,8 +2775,8 @@ func (m *Node) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Edge) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Edge) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1871,7 +2788,7 @@ func (m *Edge) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1899,7 +2816,7 @@ func (m *Edge) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1916,7 +2833,7 @@ func (m *Edge) Unmarshal(data []byte) error {
 			if m.Source == nil {
 				m.Source = &Node{}
 			}
-			if err := m.Source.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Source.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1932,7 +2849,7 @@ func (m *Edge) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1947,7 +2864,7 @@ func (m *Edge) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Kind = string(data[iNdEx:postIndex])
+			m.Kind = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -1961,7 +2878,7 @@ func (m *Edge) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1978,7 +2895,7 @@ func (m *Edge) Unmarshal(data []byte) error {
 			if m.Target == nil {
 				m.Target = &Node{}
 			}
-			if err := m.Target.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Target.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1994,7 +2911,7 @@ func (m *Edge) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2009,7 +2926,7 @@ func (m *Edge) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Fact = append(m.Fact, &kythe_proto_common.Fact{})
-			if err := m.Fact[len(m.Fact)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Fact[len(m.Fact)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2025,7 +2942,7 @@ func (m *Edge) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Ordinal |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2034,7 +2951,7 @@ func (m *Edge) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2053,8 +2970,8 @@ func (m *Edge) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *EdgeGroup) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *EdgeGroup) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2066,7 +2983,7 @@ func (m *EdgeGroup) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2094,7 +3011,7 @@ func (m *EdgeGroup) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2109,7 +3026,7 @@ func (m *EdgeGroup) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Kind = string(data[iNdEx:postIndex])
+			m.Kind = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -2123,7 +3040,7 @@ func (m *EdgeGroup) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2138,13 +3055,13 @@ func (m *EdgeGroup) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Edge = append(m.Edge, &EdgeGroup_Edge{})
-			if err := m.Edge[len(m.Edge)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Edge[len(m.Edge)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2163,8 +3080,8 @@ func (m *EdgeGroup) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *EdgeGroup_Edge) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *EdgeGroup_Edge) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2176,7 +3093,7 @@ func (m *EdgeGroup_Edge) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2204,7 +3121,7 @@ func (m *EdgeGroup_Edge) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2221,7 +3138,7 @@ func (m *EdgeGroup_Edge) Unmarshal(data []byte) error {
 			if m.Target == nil {
 				m.Target = &Node{}
 			}
-			if err := m.Target.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Target.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2237,7 +3154,7 @@ func (m *EdgeGroup_Edge) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Ordinal |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2246,7 +3163,7 @@ func (m *EdgeGroup_Edge) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2265,8 +3182,8 @@ func (m *EdgeGroup_Edge) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *PagedEdgeSet) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *PagedEdgeSet) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2278,7 +3195,7 @@ func (m *PagedEdgeSet) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2306,7 +3223,7 @@ func (m *PagedEdgeSet) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2323,7 +3240,7 @@ func (m *PagedEdgeSet) Unmarshal(data []byte) error {
 			if m.Source == nil {
 				m.Source = &Node{}
 			}
-			if err := m.Source.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Source.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2339,7 +3256,7 @@ func (m *PagedEdgeSet) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2354,7 +3271,7 @@ func (m *PagedEdgeSet) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Group = append(m.Group, &EdgeGroup{})
-			if err := m.Group[len(m.Group)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Group[len(m.Group)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2370,7 +3287,7 @@ func (m *PagedEdgeSet) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.TotalEdges |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2389,7 +3306,7 @@ func (m *PagedEdgeSet) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2404,13 +3321,13 @@ func (m *PagedEdgeSet) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.PageIndex = append(m.PageIndex, &PageIndex{})
-			if err := m.PageIndex[len(m.PageIndex)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.PageIndex[len(m.PageIndex)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2429,8 +3346,8 @@ func (m *PagedEdgeSet) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *PageIndex) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *PageIndex) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2442,7 +3359,7 @@ func (m *PageIndex) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2470,7 +3387,7 @@ func (m *PageIndex) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2485,7 +3402,7 @@ func (m *PageIndex) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.EdgeKind = string(data[iNdEx:postIndex])
+			m.EdgeKind = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -2499,7 +3416,7 @@ func (m *PageIndex) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.EdgeCount |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2518,7 +3435,7 @@ func (m *PageIndex) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2533,11 +3450,11 @@ func (m *PageIndex) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PageKey = string(data[iNdEx:postIndex])
+			m.PageKey = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2556,8 +3473,8 @@ func (m *PageIndex) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *EdgePage) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *EdgePage) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2569,7 +3486,7 @@ func (m *EdgePage) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2597,7 +3514,7 @@ func (m *EdgePage) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2612,7 +3529,7 @@ func (m *EdgePage) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PageKey = string(data[iNdEx:postIndex])
+			m.PageKey = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -2626,7 +3543,7 @@ func (m *EdgePage) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2641,7 +3558,7 @@ func (m *EdgePage) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.SourceTicket = string(data[iNdEx:postIndex])
+			m.SourceTicket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -2655,7 +3572,7 @@ func (m *EdgePage) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2672,13 +3589,13 @@ func (m *EdgePage) Unmarshal(data []byte) error {
 			if m.EdgesGroup == nil {
 				m.EdgesGroup = &EdgeGroup{}
 			}
-			if err := m.EdgesGroup.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.EdgesGroup.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2697,8 +3614,8 @@ func (m *EdgePage) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *FileDirectory) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *FileDirectory) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2710,7 +3627,7 @@ func (m *FileDirectory) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2738,7 +3655,7 @@ func (m *FileDirectory) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2753,7 +3670,7 @@ func (m *FileDirectory) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Subdirectory = append(m.Subdirectory, string(data[iNdEx:postIndex]))
+			m.Subdirectory = append(m.Subdirectory, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -2767,7 +3684,7 @@ func (m *FileDirectory) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2782,11 +3699,11 @@ func (m *FileDirectory) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.FileTicket = append(m.FileTicket, string(data[iNdEx:postIndex]))
+			m.FileTicket = append(m.FileTicket, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2805,8 +3722,8 @@ func (m *FileDirectory) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CorpusRoots) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *CorpusRoots) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2818,7 +3735,7 @@ func (m *CorpusRoots) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2846,7 +3763,7 @@ func (m *CorpusRoots) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2861,13 +3778,13 @@ func (m *CorpusRoots) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Corpus = append(m.Corpus, &CorpusRoots_Corpus{})
-			if err := m.Corpus[len(m.Corpus)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Corpus[len(m.Corpus)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2886,8 +3803,8 @@ func (m *CorpusRoots) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CorpusRoots_Corpus) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *CorpusRoots_Corpus) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2899,7 +3816,7 @@ func (m *CorpusRoots_Corpus) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2927,7 +3844,7 @@ func (m *CorpusRoots_Corpus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2942,7 +3859,7 @@ func (m *CorpusRoots_Corpus) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Corpus = string(data[iNdEx:postIndex])
+			m.Corpus = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -2956,7 +3873,7 @@ func (m *CorpusRoots_Corpus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2971,11 +3888,11 @@ func (m *CorpusRoots_Corpus) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Root = append(m.Root, string(data[iNdEx:postIndex]))
+			m.Root = append(m.Root, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2994,8 +3911,8 @@ func (m *CorpusRoots_Corpus) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *File) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *File) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3007,7 +3924,7 @@ func (m *File) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3035,7 +3952,7 @@ func (m *File) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3050,7 +3967,7 @@ func (m *File) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = string(data[iNdEx:postIndex])
+			m.Ticket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -3064,7 +3981,7 @@ func (m *File) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3078,7 +3995,7 @@ func (m *File) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Text = append(m.Text[:0], data[iNdEx:postIndex]...)
+			m.Text = append(m.Text[:0], dAtA[iNdEx:postIndex]...)
 			if m.Text == nil {
 				m.Text = []byte{}
 			}
@@ -3095,7 +4012,7 @@ func (m *File) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3110,11 +4027,11 @@ func (m *File) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Encoding = string(data[iNdEx:postIndex])
+			m.Encoding = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -3133,8 +4050,8 @@ func (m *File) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *RawAnchor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *RawAnchor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3146,7 +4063,7 @@ func (m *RawAnchor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3174,7 +4091,7 @@ func (m *RawAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3189,7 +4106,7 @@ func (m *RawAnchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = string(data[iNdEx:postIndex])
+			m.Ticket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -3203,7 +4120,7 @@ func (m *RawAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.StartOffset |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3222,7 +4139,7 @@ func (m *RawAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.EndOffset |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3241,7 +4158,7 @@ func (m *RawAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.SnippetStart |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3260,7 +4177,7 @@ func (m *RawAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.SnippetEnd |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3269,7 +4186,7 @@ func (m *RawAnchor) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -3288,8 +4205,8 @@ func (m *RawAnchor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *ExpandedAnchor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *ExpandedAnchor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3301,7 +4218,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3329,7 +4246,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3344,7 +4261,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = string(data[iNdEx:postIndex])
+			m.Ticket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -3358,7 +4275,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3373,36 +4290,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Kind = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Parent", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowServing
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthServing
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Parent = string(data[iNdEx:postIndex])
+			m.Kind = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -3416,7 +4304,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3431,7 +4319,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Text = string(data[iNdEx:postIndex])
+			m.Text = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -3445,7 +4333,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3462,7 +4350,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 			if m.Span == nil {
 				m.Span = &kythe_proto_common.Span{}
 			}
-			if err := m.Span.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3478,7 +4366,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3493,7 +4381,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Snippet = string(data[iNdEx:postIndex])
+			m.Snippet = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 7:
 			if wireType != 2 {
@@ -3507,7 +4395,7 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3524,13 +4412,13 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 			if m.SnippetSpan == nil {
 				m.SnippetSpan = &kythe_proto_common.Span{}
 			}
-			if err := m.SnippetSpan.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.SnippetSpan.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -3549,8 +4437,8 @@ func (m *ExpandedAnchor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *FileDecorations) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *FileDecorations) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3562,7 +4450,7 @@ func (m *FileDecorations) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3590,7 +4478,7 @@ func (m *FileDecorations) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3607,7 +4495,7 @@ func (m *FileDecorations) Unmarshal(data []byte) error {
 			if m.File == nil {
 				m.File = &File{}
 			}
-			if err := m.File.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.File.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3623,7 +4511,7 @@ func (m *FileDecorations) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3638,7 +4526,7 @@ func (m *FileDecorations) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Decoration = append(m.Decoration, &FileDecorations_Decoration{})
-			if err := m.Decoration[len(m.Decoration)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Decoration[len(m.Decoration)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3654,7 +4542,7 @@ func (m *FileDecorations) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3669,7 +4557,7 @@ func (m *FileDecorations) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.TargetDefinitions = append(m.TargetDefinitions, &ExpandedAnchor{})
-			if err := m.TargetDefinitions[len(m.TargetDefinitions)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.TargetDefinitions[len(m.TargetDefinitions)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3685,7 +4573,7 @@ func (m *FileDecorations) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3700,13 +4588,75 @@ func (m *FileDecorations) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Target = append(m.Target, &Node{})
-			if err := m.Target[len(m.Target)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Target[len(m.Target)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TargetOverride", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.TargetOverride = append(m.TargetOverride, &FileDecorations_Override{})
+			if err := m.TargetOverride[len(m.TargetOverride)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Diagnostic", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Diagnostic = append(m.Diagnostic, &kythe_proto_common.Diagnostic{})
+			if err := m.Diagnostic[len(m.Diagnostic)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -3725,8 +4675,8 @@ func (m *FileDecorations) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *FileDecorations_Decoration) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *FileDecorations_Decoration) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3738,7 +4688,7 @@ func (m *FileDecorations_Decoration) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3766,7 +4716,7 @@ func (m *FileDecorations_Decoration) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3783,7 +4733,7 @@ func (m *FileDecorations_Decoration) Unmarshal(data []byte) error {
 			if m.Anchor == nil {
 				m.Anchor = &RawAnchor{}
 			}
-			if err := m.Anchor.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Anchor.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3799,7 +4749,7 @@ func (m *FileDecorations_Decoration) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3814,7 +4764,7 @@ func (m *FileDecorations_Decoration) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Kind = string(data[iNdEx:postIndex])
+			m.Kind = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -3828,7 +4778,7 @@ func (m *FileDecorations_Decoration) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3843,7 +4793,7 @@ func (m *FileDecorations_Decoration) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.TargetDefinition = string(data[iNdEx:postIndex])
+			m.TargetDefinition = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -3857,7 +4807,7 @@ func (m *FileDecorations_Decoration) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3872,11 +4822,11 @@ func (m *FileDecorations_Decoration) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Target = string(data[iNdEx:postIndex])
+			m.Target = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -3895,8 +4845,8 @@ func (m *FileDecorations_Decoration) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *PagedCrossReferences) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *FileDecorations_Override) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3908,7 +4858,196 @@ func (m *PagedCrossReferences) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Override: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Override: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Overriding", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Overriding = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Overridden", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Overridden = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Kind", wireType)
+			}
+			m.Kind = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Kind |= (FileDecorations_Override_Kind(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MarkedSource", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.MarkedSource == nil {
+				m.MarkedSource = &kythe_proto_common.MarkedSource{}
+			}
+			if err := m.MarkedSource.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OverriddenDefinition", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.OverriddenDefinition = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipServing(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthServing
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PagedCrossReferences) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowServing
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3936,7 +5075,7 @@ func (m *PagedCrossReferences) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3951,7 +5090,7 @@ func (m *PagedCrossReferences) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.SourceTicket = string(data[iNdEx:postIndex])
+			m.SourceTicket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -3965,7 +5104,7 @@ func (m *PagedCrossReferences) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3980,7 +5119,7 @@ func (m *PagedCrossReferences) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Group = append(m.Group, &PagedCrossReferences_Group{})
-			if err := m.Group[len(m.Group)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Group[len(m.Group)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3996,7 +5135,7 @@ func (m *PagedCrossReferences) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4011,7 +5150,7 @@ func (m *PagedCrossReferences) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.PageIndex = append(m.PageIndex, &PagedCrossReferences_PageIndex{})
-			if err := m.PageIndex[len(m.PageIndex)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.PageIndex[len(m.PageIndex)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4027,7 +5166,7 @@ func (m *PagedCrossReferences) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.TotalReferences |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4046,7 +5185,7 @@ func (m *PagedCrossReferences) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4054,9 +5193,133 @@ func (m *PagedCrossReferences) Unmarshal(data []byte) error {
 				}
 			}
 			m.Incomplete = bool(v != 0)
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MarkedSource", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.MarkedSource == nil {
+				m.MarkedSource = &kythe_proto_common.MarkedSource{}
+			}
+			if err := m.MarkedSource.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MergeWith", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.MergeWith = append(m.MergeWith, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 10:
+			if wireType == 0 {
+				var v PagedCrossReferences_Feature
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowServing
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= (PagedCrossReferences_Feature(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.Feature = append(m.Feature, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowServing
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthServing
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				for iNdEx < postIndex {
+					var v PagedCrossReferences_Feature
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowServing
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= (PagedCrossReferences_Feature(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.Feature = append(m.Feature, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field Feature", wireType)
+			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4075,8 +5338,8 @@ func (m *PagedCrossReferences) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *PagedCrossReferences_Group) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *PagedCrossReferences_RelatedNode) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4088,7 +5351,285 @@ func (m *PagedCrossReferences_Group) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RelatedNode: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RelatedNode: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Node", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Node == nil {
+				m.Node = &Node{}
+			}
+			if err := m.Node.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ordinal", wireType)
+			}
+			m.Ordinal = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Ordinal |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipServing(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthServing
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PagedCrossReferences_Caller) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowServing
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Caller: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Caller: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Caller", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Caller == nil {
+				m.Caller = &ExpandedAnchor{}
+			}
+			if err := m.Caller.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SemanticCaller", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SemanticCaller = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MarkedSource", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.MarkedSource == nil {
+				m.MarkedSource = &kythe_proto_common.MarkedSource{}
+			}
+			if err := m.MarkedSource.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Callsite", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Callsite = append(m.Callsite, &ExpandedAnchor{})
+			if err := m.Callsite[len(m.Callsite)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipServing(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthServing
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PagedCrossReferences_Group) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowServing
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4116,7 +5657,7 @@ func (m *PagedCrossReferences_Group) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4131,7 +5672,7 @@ func (m *PagedCrossReferences_Group) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Kind = string(data[iNdEx:postIndex])
+			m.Kind = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -4145,7 +5686,7 @@ func (m *PagedCrossReferences_Group) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4160,13 +5701,75 @@ func (m *PagedCrossReferences_Group) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Anchor = append(m.Anchor, &ExpandedAnchor{})
-			if err := m.Anchor[len(m.Anchor)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Anchor[len(m.Anchor)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RelatedNode", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.RelatedNode = append(m.RelatedNode, &PagedCrossReferences_RelatedNode{})
+			if err := m.RelatedNode[len(m.RelatedNode)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Caller", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowServing
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthServing
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Caller = append(m.Caller, &PagedCrossReferences_Caller{})
+			if err := m.Caller[len(m.Caller)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4185,8 +5788,8 @@ func (m *PagedCrossReferences_Group) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *PagedCrossReferences_Page) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *PagedCrossReferences_Page) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4198,7 +5801,7 @@ func (m *PagedCrossReferences_Page) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4226,7 +5829,7 @@ func (m *PagedCrossReferences_Page) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4241,7 +5844,7 @@ func (m *PagedCrossReferences_Page) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PageKey = string(data[iNdEx:postIndex])
+			m.PageKey = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -4255,7 +5858,7 @@ func (m *PagedCrossReferences_Page) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4270,7 +5873,7 @@ func (m *PagedCrossReferences_Page) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.SourceTicket = string(data[iNdEx:postIndex])
+			m.SourceTicket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -4284,7 +5887,7 @@ func (m *PagedCrossReferences_Page) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4301,13 +5904,13 @@ func (m *PagedCrossReferences_Page) Unmarshal(data []byte) error {
 			if m.Group == nil {
 				m.Group = &PagedCrossReferences_Group{}
 			}
-			if err := m.Group.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Group.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4326,8 +5929,8 @@ func (m *PagedCrossReferences_Page) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *PagedCrossReferences_PageIndex) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *PagedCrossReferences_PageIndex) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4339,7 +5942,7 @@ func (m *PagedCrossReferences_PageIndex) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4367,7 +5970,7 @@ func (m *PagedCrossReferences_PageIndex) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4382,7 +5985,7 @@ func (m *PagedCrossReferences_PageIndex) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Kind = string(data[iNdEx:postIndex])
+			m.Kind = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -4396,7 +5999,7 @@ func (m *PagedCrossReferences_PageIndex) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Count |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4415,7 +6018,7 @@ func (m *PagedCrossReferences_PageIndex) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4430,11 +6033,11 @@ func (m *PagedCrossReferences_PageIndex) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PageKey = string(data[iNdEx:postIndex])
+			m.PageKey = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipServing(data[iNdEx:])
+			skippy, err := skipServing(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4453,8 +6056,8 @@ func (m *PagedCrossReferences_PageIndex) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipServing(data []byte) (n int, err error) {
-	l := len(data)
+func skipServing(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -4465,7 +6068,7 @@ func skipServing(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4483,7 +6086,7 @@ func skipServing(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -4500,7 +6103,7 @@ func skipServing(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4523,7 +6126,7 @@ func skipServing(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -4534,7 +6137,7 @@ func skipServing(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipServing(data[start:])
+				next, err := skipServing(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}
@@ -4558,68 +6161,97 @@ var (
 	ErrIntOverflowServing   = fmt.Errorf("proto: integer overflow")
 )
 
+func init() { proto.RegisterFile("kythe/proto/serving.proto", fileDescriptorServing) }
+
 var fileDescriptorServing = []byte{
-	// 983 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xac, 0x56, 0x4f, 0x6f, 0x1b, 0x45,
-	0x14, 0x67, 0xe2, 0xb5, 0x63, 0x3f, 0xbb, 0x34, 0x1d, 0xaa, 0x6a, 0x63, 0x84, 0x09, 0xdb, 0x03,
-	0x41, 0x14, 0x47, 0xa4, 0x15, 0x1c, 0x2a, 0x54, 0x41, 0x9a, 0x22, 0x54, 0xd4, 0x56, 0x93, 0x1e,
-	0xb8, 0x59, 0x9b, 0x9d, 0xf1, 0x76, 0x15, 0x67, 0x66, 0x35, 0x3b, 0x86, 0xe4, 0xce, 0x0d, 0x71,
-	0xe7, 0xc2, 0x27, 0x40, 0xdc, 0xf9, 0x08, 0x3d, 0x72, 0xe3, 0x84, 0x84, 0xc2, 0x99, 0xef, 0x80,
-	0xe6, 0xcd, 0xec, 0x66, 0xdd, 0xae, 0xe3, 0x28, 0xea, 0x6d, 0xde, 0xdb, 0xdf, 0x7b, 0xf3, 0x7b,
-	0x7f, 0xe6, 0xbd, 0x85, 0xcd, 0xa3, 0x53, 0xf3, 0x42, 0xec, 0xe4, 0x5a, 0x19, 0xb5, 0x53, 0x08,
-	0xfd, 0x7d, 0x26, 0xd3, 0x31, 0x4a, 0xf4, 0x1d, 0xfc, 0xe4, 0x84, 0xb1, 0xff, 0x34, 0x0c, 0xeb,
-	0xf8, 0x44, 0x1d, 0x1f, 0x2b, 0xe9, 0x10, 0xd1, 0xb7, 0x10, 0x3c, 0x51, 0x5c, 0xd0, 0x5b, 0xd0,
-	0x31, 0x59, 0x72, 0x24, 0x4c, 0x48, 0xb6, 0xc8, 0x76, 0x8f, 0x79, 0x89, 0xde, 0x81, 0x60, 0x1a,
-	0x27, 0x26, 0x5c, 0xdb, 0x6a, 0x6d, 0xf7, 0x77, 0xc3, 0x71, 0xdd, 0xbb, 0x77, 0xf4, 0x28, 0x4e,
-	0x0c, 0x43, 0x54, 0xf4, 0x92, 0x40, 0xb0, 0xcf, 0x53, 0x41, 0x3f, 0x85, 0x4e, 0xa1, 0xe6, 0x3a,
-	0x11, 0xe8, 0xae, 0xbf, 0xbb, 0x39, 0x6e, 0xa0, 0x35, 0xb6, 0x37, 0x33, 0x0f, 0xa4, 0x14, 0x82,
-	0xa3, 0x4c, 0xf2, 0x70, 0x0d, 0xef, 0xc7, 0xb3, 0x75, 0x63, 0x62, 0x9d, 0x0a, 0x13, 0xb6, 0x56,
-	0xba, 0x71, 0xc0, 0x8a, 0x70, 0x70, 0x19, 0xc2, 0x34, 0x84, 0x75, 0xa5, 0x79, 0x26, 0xe3, 0x59,
-	0xd8, 0xde, 0x22, 0xdb, 0x6d, 0x56, 0x8a, 0xd1, 0xef, 0x04, 0x7a, 0x36, 0x94, 0xaf, 0xb5, 0x9a,
-	0xe7, 0x15, 0x39, 0x52, 0x23, 0xf7, 0x39, 0x04, 0x82, 0xa7, 0xc2, 0xa7, 0xe6, 0x76, 0x23, 0xb5,
-	0xca, 0x03, 0x9e, 0x18, 0x1a, 0x0c, 0x0f, 0xce, 0x93, 0xe4, 0xa3, 0x23, 0x97, 0x8d, 0xae, 0xc6,
-	0x77, 0x6d, 0x91, 0xef, 0x5f, 0x04, 0x06, 0xcf, 0xe2, 0x54, 0x70, 0xeb, 0xfa, 0x40, 0x98, 0xab,
-	0x94, 0xe0, 0x1e, 0xb4, 0x53, 0x4b, 0xd6, 0x87, 0x34, 0xba, 0x38, 0x24, 0xe6, 0xc0, 0xf4, 0x7d,
-	0xe8, 0x1b, 0x65, 0xe2, 0xd9, 0xc4, 0x06, 0x57, 0x60, 0xa5, 0xda, 0x0c, 0x50, 0x65, 0xb1, 0x05,
-	0xfd, 0x02, 0x20, 0x8f, 0x53, 0x31, 0xc9, 0x24, 0x17, 0x27, 0xbe, 0x30, 0xcd, 0xbe, 0x6d, 0x00,
-	0xdf, 0x58, 0x14, 0xeb, 0xe5, 0xe5, 0x31, 0x3a, 0x84, 0x5e, 0xa5, 0xa7, 0xef, 0x42, 0xcf, 0x5e,
-	0x33, 0xa9, 0x55, 0xa3, 0x6b, 0x15, 0x8f, 0x6d, 0x45, 0xde, 0x03, 0xc0, 0x8f, 0x89, 0x9a, 0x4b,
-	0xe3, 0x13, 0x84, 0xf0, 0x3d, 0xab, 0xa0, 0x9b, 0xd0, 0x45, 0x1e, 0x47, 0xe2, 0x14, 0x59, 0xf6,
-	0xd8, 0xba, 0x95, 0x1f, 0x8b, 0xd3, 0xe8, 0x27, 0x02, 0x5d, 0x4b, 0xd6, 0x5e, 0xb4, 0x80, 0x23,
-	0x0b, 0x38, 0x7a, 0x1b, 0xae, 0xb9, 0x5c, 0x4d, 0xfc, 0x6b, 0x71, 0xdd, 0x3a, 0x70, 0xca, 0xe7,
-	0xee, 0xcd, 0x3c, 0x80, 0x3e, 0xa6, 0x62, 0xe2, 0x92, 0xe9, 0x5a, 0x77, 0x55, 0x32, 0x91, 0x79,
-	0x81, 0xe7, 0xe8, 0x39, 0x5c, 0x7b, 0x94, 0xcd, 0xc4, 0xc3, 0x4c, 0x8b, 0xc4, 0x28, 0x7d, 0x4a,
-	0x23, 0x18, 0x14, 0xf3, 0x43, 0x5e, 0xca, 0x21, 0xd9, 0x6a, 0xe1, 0xad, 0x35, 0x9d, 0x2d, 0xc3,
-	0x34, 0x9b, 0xd5, 0x88, 0x59, 0x08, 0x58, 0x95, 0xa3, 0x15, 0xfd, 0x48, 0xa0, 0xbf, 0xa7, 0x74,
-	0x3e, 0x2f, 0x98, 0x52, 0xa6, 0xa0, 0x0f, 0xa0, 0x93, 0xa0, 0x88, 0xee, 0xfa, 0xbb, 0x1f, 0x36,
-	0x32, 0xac, 0x59, 0x94, 0x67, 0x6f, 0x36, 0xbc, 0x07, 0x1d, 0xa7, 0xb1, 0xd3, 0xa3, 0x72, 0x85,
-	0xd3, 0xc3, 0x49, 0xf6, 0xd9, 0x68, 0xa5, 0x4a, 0x32, 0x78, 0x8e, 0x9e, 0x40, 0x60, 0x83, 0x5b,
-	0x3a, 0x71, 0x28, 0x04, 0x46, 0x9c, 0xb8, 0xcc, 0x0e, 0x18, 0x9e, 0xe9, 0x10, 0xba, 0x42, 0x26,
-	0x8a, 0x67, 0x32, 0xf5, 0x95, 0xab, 0xe4, 0xe8, 0x37, 0x02, 0x3d, 0x16, 0xff, 0xf0, 0xa5, 0x4c,
-	0x5e, 0x28, 0xbd, 0xd4, 0xeb, 0x07, 0x30, 0x28, 0x4c, 0xac, 0xcd, 0x44, 0x4d, 0xa7, 0x85, 0x28,
-	0x9b, 0xa3, 0x8f, 0xba, 0xa7, 0xa8, 0xc2, 0xee, 0x91, 0xbc, 0x04, 0xb4, 0x7c, 0xf7, 0x48, 0xee,
-	0x3f, 0xdb, 0xd2, 0xcb, 0x2c, 0xcf, 0x85, 0x99, 0xa0, 0x55, 0x18, 0x20, 0x62, 0xe0, 0x95, 0x07,
-	0x56, 0x67, 0x8b, 0x50, 0x82, 0x84, 0xe4, 0x7e, 0xa6, 0x80, 0x57, 0xed, 0x4b, 0x1e, 0xfd, 0x47,
-	0xe0, 0xed, 0xfd, 0x93, 0x3c, 0x96, 0x5c, 0xf0, 0x15, 0x94, 0x9b, 0x06, 0xe2, 0x2d, 0xe8, 0xe4,
-	0xb1, 0x16, 0xd2, 0xf8, 0x34, 0x78, 0xa9, 0x4a, 0x5a, 0xe0, 0xb0, 0x98, 0xb4, 0x3b, 0x10, 0x14,
-	0x79, 0x2c, 0x91, 0xc4, 0x92, 0x49, 0x78, 0x90, 0xc7, 0x92, 0x21, 0xca, 0x4e, 0x16, 0x4f, 0x33,
-	0xec, 0xb8, 0x9e, 0xf7, 0x22, 0xbd, 0x0f, 0x83, 0x2a, 0x70, 0xeb, 0x6f, 0x7d, 0x85, 0xbf, 0x32,
-	0x03, 0x56, 0x88, 0xfe, 0x68, 0xc1, 0x75, 0xec, 0x65, 0x91, 0x28, 0x1d, 0x9b, 0x4c, 0xc9, 0x82,
-	0x7e, 0x02, 0x81, 0x6d, 0xcb, 0x0b, 0xe7, 0x92, 0xb5, 0x61, 0x08, 0xa3, 0x4f, 0x01, 0x78, 0x65,
-	0xed, 0x47, 0xd3, 0xce, 0x52, 0xa3, 0xda, 0x45, 0xe3, 0xf3, 0x33, 0xab, 0xb9, 0xa0, 0x0c, 0xa8,
-	0x1b, 0xa7, 0x13, 0x2e, 0xa6, 0x99, 0xcc, 0x10, 0x1c, 0xb6, 0x2e, 0x1a, 0xe3, 0x0b, 0x15, 0x63,
-	0x37, 0x9c, 0xf9, 0xc3, 0x73, 0xeb, 0xda, 0x2c, 0x77, 0xf3, 0x6d, 0xf5, 0x2c, 0x1f, 0xfe, 0x4a,
-	0x00, 0xce, 0x19, 0xd2, 0xcf, 0xa0, 0x13, 0xa3, 0x7b, 0x9f, 0x97, 0xe6, 0x81, 0x51, 0x75, 0x3a,
-	0xf3, 0xe8, 0xc6, 0x36, 0xf9, 0x18, 0x6e, 0xbc, 0x16, 0xa1, 0xef, 0x8d, 0x8d, 0x57, 0xb9, 0x63,
-	0xff, 0x39, 0xea, 0x6d, 0xdf, 0x7f, 0x28, 0x45, 0x7f, 0x07, 0x70, 0x13, 0x37, 0xca, 0x9e, 0x56,
-	0x45, 0xc1, 0xc4, 0x54, 0x68, 0x21, 0x13, 0x51, 0xbc, 0x3e, 0x04, 0x49, 0xc3, 0x10, 0xdc, 0x5f,
-	0xdc, 0x25, 0x3b, 0x4b, 0xe7, 0xfd, 0xab, 0xee, 0xc7, 0x0b, 0xcb, 0x85, 0x2d, 0xec, 0x0e, 0x57,
-	0xa3, 0xbb, 0x97, 0xf7, 0xd5, 0xb4, 0x50, 0xe8, 0x47, 0xb0, 0xe1, 0x16, 0x96, 0xae, 0x80, 0xfe,
-	0x31, 0x5f, 0x47, 0x7d, 0x2d, 0xd4, 0x11, 0x40, 0x26, 0x13, 0x75, 0x9c, 0xcf, 0x84, 0x11, 0x98,
-	0x9f, 0x2e, 0xab, 0x69, 0x86, 0xdf, 0x41, 0x7b, 0xf9, 0x0f, 0xc2, 0xfd, 0xaa, 0xa2, 0x6b, 0x97,
-	0xef, 0x2d, 0x6f, 0x32, 0xfc, 0x99, 0x40, 0xf0, 0x46, 0xb6, 0x51, 0x55, 0x08, 0xb7, 0x87, 0xae,
-	0x58, 0x88, 0xe1, 0xb3, 0xfa, 0x16, 0x6e, 0x8a, 0xf6, 0x26, 0xb4, 0xeb, 0x7b, 0xd7, 0x09, 0x17,
-	0xec, 0xdc, 0xaf, 0x36, 0x5e, 0x9e, 0x8d, 0xc8, 0x9f, 0x67, 0x23, 0xf2, 0xcf, 0xd9, 0x88, 0xfc,
-	0xf2, 0xef, 0xe8, 0xad, 0xc3, 0x0e, 0x92, 0xba, 0xfb, 0x7f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xe1,
-	0x5c, 0xc6, 0x83, 0xdf, 0x0a, 0x00, 0x00,
+	// 1422 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x57, 0x4d, 0x73, 0x1b, 0x45,
+	0x13, 0xce, 0x58, 0xab, 0xaf, 0x96, 0x6c, 0xcb, 0x93, 0xbc, 0x6f, 0x6d, 0x44, 0x45, 0x11, 0x9b,
+	0x43, 0x4c, 0x91, 0xc8, 0x44, 0x09, 0x70, 0x48, 0x41, 0xca, 0x48, 0x6b, 0x08, 0x76, 0xac, 0xd4,
+	0xc8, 0x84, 0xdc, 0xb6, 0x36, 0xbb, 0x23, 0x79, 0xcb, 0xd2, 0x8e, 0x6a, 0x77, 0x9c, 0xc4, 0x77,
+	0x38, 0x51, 0xdc, 0xb9, 0x70, 0xe1, 0x4a, 0x71, 0xe1, 0x57, 0xe4, 0xc8, 0x09, 0x0e, 0x5c, 0x28,
+	0xf3, 0x1f, 0x38, 0x71, 0xa0, 0xe6, 0x63, 0x57, 0xab, 0x58, 0x72, 0x84, 0x8b, 0x93, 0xa6, 0x7b,
+	0xbb, 0x7b, 0xba, 0x9f, 0x9e, 0x79, 0xa6, 0x05, 0x57, 0x8f, 0x4e, 0xf8, 0x21, 0xdd, 0x9a, 0x44,
+	0x8c, 0xb3, 0xad, 0x98, 0x46, 0xcf, 0x83, 0x70, 0xd8, 0x92, 0x12, 0xbe, 0x2c, 0x3f, 0x29, 0xa1,
+	0xa5, 0x3f, 0xd5, 0xcd, 0xac, 0xbd, 0xc7, 0xc6, 0x63, 0x16, 0x2a, 0x0b, 0xeb, 0x07, 0x04, 0xc6,
+	0x3e, 0xf3, 0x29, 0xfe, 0x3f, 0x14, 0x78, 0xe0, 0x1d, 0x51, 0x6e, 0xa2, 0x26, 0xda, 0x2c, 0x13,
+	0x2d, 0xe1, 0x5b, 0x60, 0x0c, 0x5c, 0x8f, 0x9b, 0x2b, 0xcd, 0xdc, 0x66, 0xa5, 0x6d, 0xb6, 0xb2,
+	0xe1, 0x75, 0xa4, 0x1d, 0xd7, 0xe3, 0x44, 0x5a, 0xe1, 0x03, 0xb8, 0xec, 0xd3, 0x41, 0x10, 0x06,
+	0x3c, 0x60, 0xa1, 0x33, 0x62, 0x9e, 0x2b, 0x16, 0x66, 0xae, 0x89, 0x36, 0x2b, 0xed, 0x1b, 0xad,
+	0x39, 0xb9, 0xb5, 0xec, 0x97, 0x13, 0x37, 0xf4, 0xa9, 0xbf, 0x1d, 0x7a, 0x87, 0x2c, 0x22, 0x78,
+	0xea, 0xbf, 0xa7, 0xdd, 0xad, 0x57, 0x08, 0x0c, 0xdb, 0x1f, 0x52, 0x7c, 0x07, 0x0a, 0x31, 0x3b,
+	0x8e, 0x3c, 0x2a, 0x93, 0xac, 0xb4, 0xaf, 0xce, 0x8d, 0x28, 0xea, 0x21, 0xda, 0x10, 0x63, 0x30,
+	0x8e, 0x82, 0xd0, 0x37, 0x57, 0x64, 0x55, 0x72, 0x2d, 0xc2, 0x70, 0x37, 0x1a, 0x52, 0xae, 0x13,
+	0x3b, 0x2f, 0x8c, 0x32, 0x4c, 0x61, 0x30, 0x96, 0x82, 0xc1, 0x84, 0x22, 0x8b, 0xfc, 0x20, 0x74,
+	0x47, 0x66, 0xbe, 0x89, 0x36, 0xf3, 0x24, 0x11, 0xad, 0x9f, 0x10, 0x94, 0x45, 0x29, 0x9f, 0x46,
+	0xec, 0x78, 0x92, 0x26, 0x87, 0x32, 0xc9, 0x7d, 0x08, 0x06, 0xf5, 0x87, 0x54, 0x03, 0xbe, 0x00,
+	0xb3, 0x24, 0x82, 0x5c, 0x11, 0xe9, 0x50, 0xef, 0x4f, 0x41, 0xd2, 0xd5, 0xa1, 0x65, 0xab, 0xcb,
+	0xe4, 0xbb, 0x32, 0x9b, 0xef, 0x6f, 0x08, 0xaa, 0x8f, 0xdd, 0x21, 0xf5, 0x45, 0xe8, 0x3e, 0xe5,
+	0x17, 0x69, 0xc1, 0x3d, 0xc8, 0x0f, 0x45, 0xb2, 0xba, 0xa4, 0xc6, 0xf9, 0x25, 0x11, 0x65, 0x8c,
+	0xaf, 0x43, 0x85, 0x33, 0xee, 0x8e, 0x1c, 0x51, 0x5c, 0x2c, 0x3b, 0x95, 0x27, 0x20, 0x55, 0xc2,
+	0x36, 0xc6, 0x1f, 0x01, 0x4c, 0xdc, 0x21, 0x75, 0x82, 0xd0, 0xa7, 0x2f, 0x75, 0x63, 0xe6, 0xc7,
+	0x16, 0x05, 0x3c, 0x14, 0x56, 0xa4, 0x3c, 0x49, 0x96, 0xd6, 0x33, 0x28, 0xa7, 0x7a, 0xfc, 0x16,
+	0x94, 0xc5, 0x36, 0x4e, 0xa6, 0x1b, 0x25, 0xa1, 0xd8, 0x15, 0x1d, 0xb9, 0x06, 0x20, 0x3f, 0x7a,
+	0xec, 0x38, 0xe4, 0x1a, 0x20, 0x69, 0xde, 0x11, 0x0a, 0x7c, 0x15, 0x4a, 0x32, 0x8f, 0x23, 0x7a,
+	0x22, 0xb3, 0x2c, 0x93, 0xa2, 0x90, 0x77, 0xe9, 0x89, 0xf5, 0x0d, 0x82, 0x92, 0x48, 0x56, 0x6c,
+	0x34, 0x63, 0x87, 0x66, 0xec, 0xf0, 0x0d, 0x58, 0x55, 0x58, 0x39, 0xfa, 0x0e, 0xaa, 0xd3, 0x5a,
+	0x55, 0xca, 0x03, 0x75, 0x13, 0x1f, 0x40, 0x45, 0x42, 0xe1, 0x28, 0x30, 0xd5, 0xd1, 0x7d, 0x13,
+	0x98, 0x32, 0xf3, 0x58, 0xae, 0xad, 0x03, 0x58, 0xdd, 0x09, 0x46, 0xb4, 0x1b, 0x44, 0xd4, 0xe3,
+	0x2c, 0x3a, 0xc1, 0x16, 0x54, 0xe3, 0xe3, 0x67, 0x7e, 0x22, 0x9b, 0xa8, 0x99, 0x93, 0xbb, 0x66,
+	0x74, 0xa2, 0x0d, 0x83, 0x60, 0x94, 0x49, 0x4c, 0x98, 0x80, 0x50, 0xa9, 0xb4, 0xac, 0xaf, 0x10,
+	0x54, 0x3a, 0x2c, 0x9a, 0x1c, 0xc7, 0x84, 0x31, 0x1e, 0xe3, 0x07, 0x50, 0xf0, 0xa4, 0x28, 0xc3,
+	0x55, 0xda, 0x37, 0xe7, 0x66, 0x98, 0xf1, 0x48, 0xd6, 0xda, 0xad, 0x7e, 0x0f, 0x0a, 0x4a, 0x23,
+	0x38, 0x29, 0x0d, 0x25, 0x39, 0x49, 0x49, 0xe2, 0xda, 0x44, 0x8c, 0x25, 0xc9, 0xc8, 0xb5, 0xb5,
+	0x0f, 0x86, 0x28, 0x6e, 0x21, 0x8f, 0x61, 0x30, 0x38, 0x7d, 0xa9, 0x90, 0xad, 0x12, 0xb9, 0xc6,
+	0x75, 0x28, 0xd1, 0xd0, 0x63, 0x7e, 0x10, 0x0e, 0x75, 0xe7, 0x52, 0xd9, 0xfa, 0x11, 0x41, 0x99,
+	0xb8, 0x2f, 0x14, 0x2b, 0x2d, 0x8c, 0xfa, 0x36, 0x54, 0x63, 0xee, 0x46, 0xdc, 0x61, 0x83, 0x41,
+	0x4c, 0x93, 0xc3, 0x51, 0x91, 0xba, 0x9e, 0x54, 0xc9, 0xd3, 0x13, 0xfa, 0x89, 0x41, 0x4e, 0x9f,
+	0x9e, 0xd0, 0xd7, 0x9f, 0x45, 0xeb, 0xc3, 0x60, 0x32, 0xa1, 0xdc, 0x91, 0x5e, 0xa6, 0x21, 0x2d,
+	0xaa, 0x5a, 0xd9, 0x17, 0x3a, 0xd1, 0x84, 0xc4, 0x88, 0x86, 0xbe, 0xe6, 0x14, 0xd0, 0x2a, 0x3b,
+	0xf4, 0xad, 0xdf, 0x11, 0xac, 0xcd, 0x12, 0xe9, 0x79, 0x40, 0x9c, 0x21, 0xc4, 0x04, 0x1c, 0x43,
+	0xe9, 0x24, 0x38, 0xb7, 0xc0, 0x88, 0x27, 0x6e, 0x28, 0x37, 0x5b, 0xc0, 0x78, 0xfd, 0x89, 0x1b,
+	0x12, 0x69, 0x25, 0x18, 0x44, 0xa7, 0x63, 0x16, 0xd4, 0xd9, 0xd6, 0x22, 0xbe, 0x0f, 0xd5, 0xb4,
+	0x40, 0x11, 0xaf, 0xf8, 0x86, 0x78, 0x49, 0xa5, 0x42, 0xf8, 0xdc, 0x28, 0xe5, 0x6a, 0x86, 0xf5,
+	0x75, 0x11, 0xd6, 0xe5, 0xc9, 0xa5, 0x1e, 0x8b, 0xe4, 0x93, 0x10, 0xe3, 0xdb, 0x60, 0x88, 0x43,
+	0x78, 0x2e, 0x0b, 0x09, 0x1f, 0x22, 0xcd, 0x70, 0x0f, 0xc0, 0x4f, 0xbd, 0x35, 0x11, 0x6d, 0x2d,
+	0x74, 0xca, 0x6c, 0xd4, 0x9a, 0xae, 0x49, 0x26, 0x04, 0x26, 0x80, 0x15, 0x79, 0x3a, 0xd3, 0x07,
+	0x4b, 0xb0, 0x54, 0x6e, 0xd9, 0x87, 0x6e, 0x43, 0xb9, 0x77, 0xa7, 0xde, 0x19, 0xe6, 0x56, 0x6c,
+	0xb6, 0x04, 0x73, 0x3f, 0x81, 0x75, 0x9d, 0x06, 0x7b, 0x4e, 0xa3, 0x28, 0xf0, 0xa9, 0x99, 0x97,
+	0xbe, 0xb7, 0x97, 0x2a, 0xae, 0xa7, 0x9d, 0xc8, 0x9a, 0x8a, 0x92, 0xc8, 0xf8, 0x63, 0x00, 0x3f,
+	0x70, 0x87, 0x21, 0x8b, 0x79, 0xe0, 0x99, 0x85, 0x39, 0xe4, 0xaa, 0x7b, 0xd6, 0x4d, 0xad, 0x48,
+	0xc6, 0xa3, 0xfe, 0x3d, 0x02, 0x98, 0x6e, 0x84, 0x3f, 0x80, 0x82, 0x2b, 0xcb, 0xd6, 0xfd, 0x9a,
+	0x4f, 0x5b, 0xe9, 0x7d, 0x23, 0xda, 0x7a, 0xee, 0x61, 0x7d, 0x17, 0x36, 0xce, 0x20, 0xaf, 0x4f,
+	0x6e, 0xed, 0x75, 0x4c, 0xe5, 0x2d, 0x50, 0x90, 0xe6, 0xf5, 0x2d, 0x90, 0x52, 0xfd, 0xe7, 0x15,
+	0x28, 0xa5, 0xc5, 0x36, 0x00, 0x34, 0x7a, 0x82, 0x09, 0xd4, 0x75, 0xc9, 0x68, 0x32, 0xdf, 0x7d,
+	0x1a, 0xea, 0x5c, 0x32, 0x1a, 0xbc, 0xa3, 0xb3, 0x14, 0x97, 0x7b, 0xad, 0xdd, 0xfe, 0x57, 0xc8,
+	0xb7, 0xc4, 0x13, 0xa3, 0x2b, 0xb3, 0x61, 0x75, 0xec, 0x46, 0x47, 0xd4, 0x77, 0xf4, 0x13, 0x6b,
+	0x48, 0xb0, 0x9a, 0xf3, 0x70, 0x7f, 0x24, 0x0d, 0xfb, 0xd2, 0x8e, 0x54, 0xc7, 0x19, 0x09, 0xdf,
+	0x85, 0xff, 0x4d, 0x93, 0xcb, 0x82, 0xa4, 0x20, 0xb8, 0x32, 0xfd, 0x38, 0x05, 0xca, 0xb2, 0xc0,
+	0x90, 0x8f, 0xdd, 0x2a, 0x94, 0x7b, 0x4f, 0x6c, 0x42, 0x1e, 0x76, 0xed, 0x7e, 0xed, 0x12, 0xae,
+	0x40, 0xd1, 0x7e, 0x7a, 0x60, 0xef, 0x77, 0xfb, 0x35, 0x64, 0xfd, 0x0a, 0x70, 0x45, 0x0e, 0x03,
+	0x9d, 0x88, 0xc5, 0x31, 0xa1, 0x03, 0x1a, 0xd1, 0xd0, 0xa3, 0xf1, 0xd9, 0xf7, 0x0b, 0xcd, 0x79,
+	0xbf, 0xec, 0xd9, 0x31, 0x60, 0x6b, 0xe1, 0x53, 0xfd, 0x7a, 0xf8, 0xd6, 0xcc, 0x5c, 0x40, 0x66,
+	0x9e, 0x7d, 0x75, 0xe1, 0xee, 0x2e, 0x1f, 0x6b, 0xde, 0x2c, 0x80, 0xdf, 0x81, 0x9a, 0x9a, 0x35,
+	0xa2, 0xd4, 0x50, 0xf3, 0xf0, 0xba, 0xd4, 0x67, 0x4a, 0x6d, 0x00, 0x04, 0xa1, 0xc7, 0xc6, 0x93,
+	0x11, 0xe5, 0x54, 0x22, 0x5a, 0x22, 0x19, 0xcd, 0xd9, 0x1e, 0x16, 0x2e, 0xd4, 0xc3, 0x6b, 0x00,
+	0x63, 0x1a, 0x0d, 0xa9, 0xf3, 0x22, 0xe0, 0x87, 0x66, 0x51, 0x3e, 0x74, 0x65, 0xa9, 0xf9, 0x32,
+	0xe0, 0x87, 0x78, 0x17, 0x8a, 0x03, 0xea, 0xf2, 0xe3, 0x88, 0x9a, 0xd0, 0xcc, 0x6d, 0xae, 0xb5,
+	0xef, 0x2c, 0x8f, 0xc0, 0x8e, 0x72, 0x24, 0x49, 0x84, 0xfa, 0x13, 0xa8, 0x10, 0x3a, 0x72, 0x39,
+	0xf5, 0xe5, 0x3f, 0x81, 0xdb, 0x60, 0x84, 0xcc, 0x5f, 0x62, 0xbe, 0x93, 0x66, 0x8b, 0x67, 0xc7,
+	0xfa, 0x5f, 0x08, 0x0a, 0x1d, 0x77, 0x34, 0xa2, 0x11, 0xbe, 0x0f, 0x05, 0x4f, 0xae, 0x74, 0xd4,
+	0xa5, 0x18, 0x52, 0xbb, 0xe0, 0x9b, 0xb0, 0x1e, 0xd3, 0xb1, 0x1b, 0xf2, 0xc0, 0x73, 0x74, 0x14,
+	0x75, 0x07, 0xd7, 0x12, 0xb5, 0xde, 0xe5, 0x0c, 0xf6, 0xb9, 0x0b, 0x61, 0xff, 0x00, 0x4a, 0x62,
+	0x9b, 0x38, 0xe0, 0x54, 0x13, 0xf1, 0x52, 0xe9, 0xa6, 0x4e, 0xf5, 0xbf, 0x11, 0xe4, 0x17, 0x0f,
+	0xf8, 0xf7, 0x53, 0x2e, 0x5c, 0x59, 0x3e, 0x78, 0x42, 0x88, 0x4f, 0xa1, 0x1a, 0xa9, 0x5e, 0x39,
+	0xb2, 0x49, 0xea, 0xfc, 0xbf, 0xbf, 0x7c, 0xf7, 0x33, 0x9d, 0x26, 0x95, 0x28, 0xd3, 0xf6, 0xcf,
+	0xd2, 0x16, 0xa9, 0x9a, 0xdf, 0x5b, 0x3e, 0xa6, 0x82, 0x3f, 0xe9, 0x57, 0xfd, 0x5b, 0x04, 0xc6,
+	0x7f, 0x32, 0xf1, 0xa6, 0x8c, 0xa1, 0xfa, 0x78, 0x41, 0xc6, 0xa8, 0x3f, 0xce, 0x4e, 0xfa, 0xf3,
+	0x3a, 0x72, 0x05, 0xf2, 0xd9, 0xd9, 0x5e, 0x09, 0xe7, 0xcd, 0xf5, 0xfb, 0x50, 0xd4, 0xb7, 0x08,
+	0x6f, 0xc0, 0x2a, 0xb1, 0xf7, 0xb6, 0x0f, 0xec, 0xae, 0xb3, 0xdf, 0x53, 0x9c, 0xb9, 0x01, 0xab,
+	0x8f, 0xb6, 0xc9, 0xae, 0xdd, 0x75, 0xfa, 0xbd, 0x2f, 0x48, 0xc7, 0xae, 0x21, 0x41, 0xa3, 0x9d,
+	0xed, 0xbd, 0x3d, 0x9b, 0xf4, 0x6b, 0x2b, 0xb8, 0x06, 0xd5, 0xae, 0xdd, 0xd9, 0xdb, 0x26, 0xdb,
+	0x07, 0x0f, 0x7b, 0xfb, 0xfd, 0x5a, 0xee, 0x93, 0x3b, 0xaf, 0x4e, 0x1b, 0xe8, 0x97, 0xd3, 0x06,
+	0xfa, 0xe3, 0xb4, 0x81, 0xbe, 0xfb, 0xb3, 0x71, 0x09, 0xae, 0x7b, 0x6c, 0xdc, 0x1a, 0x32, 0x36,
+	0x1c, 0xd1, 0x96, 0x4f, 0x9f, 0x73, 0xc6, 0x46, 0x71, 0xb6, 0xfc, 0x67, 0x05, 0xf9, 0x73, 0xf7,
+	0x9f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x6f, 0xf5, 0xf4, 0xa1, 0x0b, 0x10, 0x00, 0x00,
 }

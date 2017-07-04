@@ -18,6 +18,7 @@
 
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 
 #include <fcntl.h>
 #include <openssl/sha.h>
@@ -39,6 +40,7 @@
 #include "kythe/cxx/common/path_utils.h"
 #include "kythe/cxx/common/proto_conversions.h"
 #include "kythe/proto/analysis.pb.h"
+#include "kythe/proto/buildinfo.pb.h"
 #include "kythe/proto/cxx.pb.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TargetSelect.h"
@@ -49,11 +51,14 @@ namespace kythe {
 namespace {
 
 // We need "the lowercase ascii hex SHA-256 digest of the file contents."
-static constexpr char kHexDigits[] = "0123456789abcdef";
+constexpr char kHexDigits[] = "0123456789abcdef";
+
+// The message type URI for the build details message.
+constexpr char kBuildDetailsURI[] = "kythe.io/proto/kythe.proto.BuildDetails";
 
 /// \brief Lowercase-string-hex-encodes the array sha_buf.
 /// \param sha_buf The bytes of the hash.
-static std::string LowercaseStringHexEncodeSha(
+std::string LowercaseStringHexEncodeSha(
     const unsigned char (&sha_buf)[SHA256_DIGEST_LENGTH]) {
   std::string sha_text(SHA256_DIGEST_LENGTH * 2, '\0');
   for (unsigned i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
@@ -438,8 +443,8 @@ void ExtractorPPCallbacks::AddFile(const clang::FileEntry* file,
                                                buffer->getBufferEnd());
     contents.first->second.vname.CopyFrom(index_writer_->VNameForPath(
         RelativizePath(path, index_writer_->root_directory())));
-    LOG(INFO) << "added content for " << path << ": mapped to "
-              << contents.first->second.vname.DebugString() << "\n";
+    VLOG(1) << "added content for " << path << ": mapped to "
+            << contents.first->second.vname.DebugString() << "\n";
   }
 }
 
@@ -735,7 +740,7 @@ class ExtractorAction : public clang::PreprocessorFrontendAction {
  public:
   explicit ExtractorAction(IndexWriter* index_writer,
                            ExtractorCallback callback)
-      : callback_(callback), index_writer_(index_writer) {}
+      : callback_(std::move(callback)), index_writer_(index_writer) {}
 
   void ExecuteAction() override {
     const auto inputs = getCompilerInstance().getFrontendOpts().Inputs;
@@ -947,15 +952,26 @@ void IndexWriter::FillFileInput(
 }
 
 void IndexWriter::WriteIndex(
-    supported_language::Language lang,
-    std::unique_ptr<IndexWriterSink> sink, const std::string& main_source_file,
-    const std::string& entry_context,
+    supported_language::Language lang, std::unique_ptr<IndexWriterSink> sink,
+    const std::string& main_source_file, const std::string& entry_context,
     const std::unordered_map<std::string, SourceFile>& source_files,
     const HeaderSearchInfo* header_search_info, bool had_errors,
     const std::string& clang_working_dir) {
   kythe::proto::CompilationUnit unit;
   std::string identifying_blob;
   identifying_blob.append(corpus_);
+
+  // Try to find the name of the output file. It's okay if this doesn't succeed.
+  // TODO(fromberger): Consider maybe recognizing "-ofoo" too.
+  std::string output_file = output_path_;
+  if (output_file.empty()) {
+    for (int i = 0; i < args_.size(); i++) {
+      if (args_[i] == "-o" && (i + 1) < args_.size()) {
+        output_file = args_[i + 1];
+        break;
+      }
+    }
+  }
 
   std::vector<std::string> final_args(args_);
   // Record the target triple in the list of arguments. Put it at the front
@@ -976,7 +992,6 @@ void IndexWriter::WriteIndex(
   kythe::proto::VName main_vname = VNameForPath(main_source_file);
   unit_vname->CopyFrom(main_vname);
   unit_vname->set_language(supported_language::ToString(lang));
-  unit_vname->set_signature("cu#" + identifying_blob_digest);
   unit_vname->clear_path();
 
   if (header_search_info != nullptr) {
@@ -985,12 +1000,20 @@ void IndexWriter::WriteIndex(
     PackAny(cxx_details, kCxxCompilationUnitDetailsURI, unit.add_details());
   }
 
+  if (!target_name_.empty()) {
+    kythe::proto::BuildDetails build_details;
+    build_details.set_build_target(target_name_);
+    build_details.set_rule_type(rule_type_);  // may be empty; that's OK
+    PackAny(build_details, kBuildDetailsURI, unit.add_details());
+  }
+
   for (const auto& file : source_files) {
     FillFileInput(file.first, file.second, unit.add_required_input());
   }
   unit.set_entry_context(entry_context);
   unit.set_has_compile_errors(had_errors);
   unit.add_source_file(main_source_file);
+  unit.set_output_key(output_file);  // may be empty; that's OK
   llvm::SmallString<256> absolute_working_directory(
       llvm::StringRef(clang_working_dir.data(), clang_working_dir.size()));
   std::error_code err =
@@ -1015,7 +1038,7 @@ void IndexWriter::WriteIndex(
 std::unique_ptr<clang::FrontendAction> NewExtractor(
     IndexWriter* index_writer, ExtractorCallback callback) {
   return std::unique_ptr<clang::FrontendAction>(
-      new ExtractorAction(index_writer, callback));
+      new ExtractorAction(index_writer, std::move(callback)));
 }
 
 void MapCompilerResources(clang::tooling::ToolInvocation* invocation,
@@ -1057,7 +1080,7 @@ void ExtractorConfiguration::SetVNameConfig(const std::string& path) {
 
 void ExtractorConfiguration::SetArgs(const std::vector<std::string>& args) {
   final_args_ = args;
-  std::string executable = final_args_.size() ? final_args_[0] : "";
+  std::string executable = !final_args_.empty() ? final_args_[0] : "";
   if (final_args_.size() >= 3 && final_args_[1] == "--with_executable") {
     executable = final_args_[2];
     final_args_.erase(final_args_.begin() + 1, final_args_.begin() + 3);
@@ -1110,6 +1133,9 @@ bool ExtractorConfiguration::Extract(supported_language::Language lang,
                                      std::unique_ptr<IndexWriterSink> sink) {
   llvm::IntrusiveRefCntPtr<clang::FileManager> file_manager(
       new clang::FileManager(file_system_options_));
+  index_writer_.set_target_name(target_name_);
+  index_writer_.set_rule_type(rule_type_);
+  index_writer_.set_output_path(output_path_);
   auto extractor = NewExtractor(
       &index_writer_,
       [this, &lang, &sink](

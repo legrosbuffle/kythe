@@ -46,10 +46,12 @@ import (
 	"kythe.io/kythe/go/platform/indexpack"
 	"kythe.io/kythe/go/platform/kindex"
 	"kythe.io/kythe/go/platform/vfs"
+	"kythe.io/kythe/go/util/ptypes"
 
 	"bitbucket.org/creachadair/stringset"
 
 	apb "kythe.io/kythe/proto/analysis_proto"
+	gopb "kythe.io/kythe/proto/go_proto"
 	spb "kythe.io/kythe/proto/storage_proto"
 )
 
@@ -81,6 +83,9 @@ type Extractor struct {
 	// and a compiled package cannot be found in the normal location, the
 	// extractor will try in this location.
 	AltInstallPath string
+
+	// Extra file paths to include in each compilation record.
+	ExtraFiles []string
 
 	// A function to generate a vname from a package's import path.  If nil,
 	// the extractor will use govname.ForPackage.
@@ -148,8 +153,9 @@ func (e *Extractor) fetchAndStore(ctx context.Context, path string, a *indexpack
 	}
 	digest := strings.TrimSuffix(name, filepath.Ext(name))
 	if e.fmap == nil {
-		e.fmap = map[string]string{path: digest}
+		e.fmap = make(map[string]string)
 	}
+	e.fmap[path] = digest
 	return digest, err
 }
 
@@ -276,9 +282,16 @@ func (p *Package) Extract() error {
 		Argument: []string{"go", "build"},
 	}
 	bc := p.ext.BuildContext
-	p.addEnv(cu, "GOPATH", bc.GOPATH)
-	p.addEnv(cu, "GOOS", bc.GOOS)
-	p.addEnv(cu, "GOARCH", bc.GOARCH)
+	if info, err := ptypes.MarshalAny(&gopb.GoDetails{
+		Gopath:     bc.GOPATH,
+		Goos:       bc.GOOS,
+		Goarch:     bc.GOARCH,
+		Compiler:   bc.Compiler,
+		BuildTags:  bc.BuildTags,
+		CgoEnabled: bc.CgoEnabled,
+	}); err == nil {
+		cu.Details = append(cu.Details, info)
+	}
 
 	// Add required inputs from this package (source files of various kinds).
 	bp := p.BuildPackage
@@ -289,6 +302,9 @@ func (p *Package) Extract() error {
 	p.addFiles(cu, bp.Root, srcBase, bp.CXXFiles)
 	p.addFiles(cu, bp.Root, srcBase, bp.HFiles)
 	p.addSource(cu, bp.Root, srcBase, bp.TestGoFiles)
+
+	// Add extra inputs that may be specified by the extractor.
+	p.addFiles(cu, filepath.Dir(bp.SrcRoot), "", p.ext.ExtraFiles)
 
 	// TODO(fromberger): Treat tests that are not in the same package as a
 	// separate compilation, e.g.,
@@ -303,8 +319,8 @@ func (p *Package) Extract() error {
 	missing = append(missing, p.addDeps(cu, bp.TestImports)...)
 
 	// Add command-line arguments.
-	// TODO(fromberger): Figure out what to do with cgo compiler flags.
-	// Also, whether we should emit separate compilations for cgo actions.
+	// TODO(fromberger): Figure out whether we should emit separate
+	// compilations for cgo actions.
 	p.addFlag(cu, "-compiler", bc.Compiler)
 	if t := bp.AllTags; len(t) > 0 {
 		p.addFlag(cu, "-tags", strings.Join(t, " "))
@@ -361,22 +377,42 @@ func (p *Package) Store(ctx context.Context, a *indexpack.Archive) ([]string, er
 	return unitFiles, nil
 }
 
-// extFetcher implements analysis.Fetcher by dispatching to an extractor.
-type extFetcher struct {
-	ctx context.Context
-	ext *Extractor
-}
+// mapFetcher implements analysis.Fetcher by dispatching to a preloaded map
+// from digests to contents.
+type mapFetcher map[string][]byte
 
-// Fetch implements the analysis.Fetcher interface. Where this is used, the
-// digest argument is actually the fully-expanded path, and the nominal path is
-// ignored.
-func (e extFetcher) Fetch(_, digest string) ([]byte, error) { return e.ext.readFile(e.ctx, digest) }
+// Fetch implements the analysis.Fetcher interface. The path argument is ignored.
+func (m mapFetcher) Fetch(_, digest string) ([]byte, error) {
+	if data, ok := m[digest]; ok {
+		return data, nil
+	}
+	return nil, os.ErrNotExist
+}
 
 // EachUnit calls f with a compilation record for each unit in p.  If f reports
 // an error, that error is returned by EachUnit.
 func (p *Package) EachUnit(ctx context.Context, f func(*kindex.Compilation) error) error {
+	fetcher := make(mapFetcher)
 	for _, cu := range p.Units {
-		idx, err := kindex.FromUnit(cu, extFetcher{ctx: ctx, ext: p.ext})
+		// Ensure all the file contents are loaded, and update the digests.
+		for _, ri := range cu.RequiredInput {
+			if !strings.Contains(ri.Info.Digest, "/") {
+				continue // skip those that are already complete
+			}
+			rc, err := vfs.Open(ctx, ri.Info.Digest)
+			if err != nil {
+				return fmt.Errorf("opening input: %v", err)
+			}
+			fd, err := kindex.FileData(ri.Info.Path, rc)
+			rc.Close()
+			if err != nil {
+				return fmt.Errorf("reading input: %v", err)
+			}
+			fetcher[fd.Info.Digest] = fd.Content
+			ri.Info.Digest = fd.Info.Digest
+		}
+
+		idx, err := kindex.FromUnit(cu, fetcher)
 		if err != nil {
 			return fmt.Errorf("loading compilation: %v", err)
 		}
@@ -398,10 +434,15 @@ func (p *Package) addFiles(cu *apb.CompilationUnit, root, base string, names []s
 		if base != "" {
 			path = filepath.Join(base, name)
 		}
+		trimmed := strings.TrimPrefix(path, root+"/")
 		cu.RequiredInput = append(cu.RequiredInput, &apb.CompilationUnit_FileInput{
+			VName: &spb.VName{
+				Corpus: p.ext.Corpus,
+				Path:   trimmed,
+			},
 			Info: &apb.FileInfo{
-				Path:   strings.TrimPrefix(path, root+"/"),
-				Digest: path,
+				Path:   trimmed,
+				Digest: path, // provisional, until the file is loaded
 			},
 		})
 	}

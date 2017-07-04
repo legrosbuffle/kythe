@@ -9,11 +9,13 @@ go_package_library(
         "//third_party/proto:any_proto_go",
         "@go_protobuf//:proto",
         "@go_protobuf//:ptypes",
+        "@go_protobuf//:ptypes/any",
     ],
 )
 
 go_test(
     name = "ptypes_test",
+    size = "small",
     srcs = ["ptypes_test.go"],
     library = "ptypes",
     visibility = ["//visibility:private"],

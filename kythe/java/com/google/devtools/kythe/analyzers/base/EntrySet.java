@@ -19,6 +19,7 @@ package com.google.devtools.kythe.analyzers.base;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hasher;
@@ -29,6 +30,7 @@ import com.google.devtools.kythe.proto.Storage.VName;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Set of storage entries with a common (source, edgeKind, target) tuple.
@@ -36,11 +38,11 @@ import java.util.Map;
  * <p>The signature of source {@link VName} may be explicitly set or be determined by the set of
  * properties in the {@link EntrySet} along with a set of salts.
  */
-public class EntrySet {
+public final class EntrySet {
   private static final FormattingLogger logger = FormattingLogger.getLogger(EntrySet.class);
 
   /** {@link Charset} used to encode {@link String} property values. */
-  public static final Charset PROPERTY_VALUE_CHARSET = StandardCharsets.UTF_8;
+  static final Charset PROPERTY_VALUE_CHARSET = StandardCharsets.UTF_8;
 
   /**
    * Map with only the "empty" property. This is used since a (source, edge, target) tuple may only
@@ -104,9 +106,11 @@ public class EntrySet {
    * Using the first {@link VName} as a base, merge the specified fields from the {@code extension}
    * {@link VName} into a new {@link VName}.
    */
-  public static VName extendVName(VName base, VName extension) {
+  static VName extendVName(VName base, VName extension) {
     return VName.newBuilder(base).mergeFrom(extension).build();
   }
+
+  private static final int MAX_VALUE_STRING_SIZE = 64;
 
   @Override
   public String toString() {
@@ -117,9 +121,14 @@ public class EntrySet {
       builder.append("EdgeKind: " + edgeKind);
     }
     for (Map.Entry<String, byte[]> entry : properties.entrySet()) {
-      builder.append(
-          String.format(
-              "%s %s\n", entry.getKey(), new String(entry.getValue(), PROPERTY_VALUE_CHARSET)));
+      String val;
+      if (SALT_IGNORED_FACT_VALUES.contains(entry.getKey())
+          || entry.getValue().length > MAX_VALUE_STRING_SIZE) {
+        val = "<...>";
+      } else {
+        val = new String(entry.getValue(), PROPERTY_VALUE_CHARSET);
+      }
+      builder.append(String.format("%s %s\n", entry.getKey(), val));
     }
     return builder.append("}").toString();
   }
@@ -129,6 +138,26 @@ public class EntrySet {
     if (!emitted) {
       logger.severefmt("EntrySet finalized before being emitted: " + this);
     }
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (!(o instanceof EntrySet)) {
+      return false;
+    }
+    EntrySet entrySet = (EntrySet) o;
+    return Objects.equals(source, entrySet.source) &&
+        Objects.equals(edgeKind, entrySet.edgeKind) &&
+        Objects.equals(target, entrySet.target) &&
+        Objects.equals(properties, entrySet.properties);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(source, edgeKind, target, properties);
   }
 
   /**
@@ -246,16 +275,28 @@ public class EntrySet {
   }
 
   private static final HashFunction SIGNATURE_HASH_FUNCTION = Hashing.sha256();
+  private static final ImmutableSet<String> SALT_IGNORED_FACT_VALUES =
+      ImmutableSet.of("/kythe/code");
 
   protected static String buildSignature(
       ImmutableList<String> salts, ImmutableSortedMap<String, byte[]> properties) {
     Hasher signature = SIGNATURE_HASH_FUNCTION.newHasher();
+    logger.finest(">>>>>>>> Building signature");
     for (String salt : salts) {
+      logger.finestfmt("    Salt: %s", salt);
       signature.putString(salt, PROPERTY_VALUE_CHARSET);
     }
     for (Map.Entry<String, byte[]> property : properties.entrySet()) {
+      if (SALT_IGNORED_FACT_VALUES.contains(property.getKey())) {
+        logger.finestfmt("    %s [SKIPPED]", property.getKey());
+        continue;
+      }
+      String propertyValue = new String(property.getValue(), PROPERTY_VALUE_CHARSET);
+      logger.finestfmt("    %s: %s", property.getKey(), propertyValue);
       signature.putString(property.getKey(), PROPERTY_VALUE_CHARSET).putBytes(property.getValue());
     }
-    return signature.hash().toString();
+    String ret = signature.hash().toString();
+    logger.finestfmt("<<<<<<<< Built signature: %s", ret);
+    return ret;
   }
 }

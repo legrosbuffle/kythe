@@ -20,8 +20,8 @@
 #include <functional>
 #include <string>
 
+#include "kythe/proto/common.pb.h"
 #include "kythe/proto/storage.pb.h"
-#include "kythe/proto/xref.pb.h"
 
 #include "assertions.h"
 
@@ -174,6 +174,10 @@ class Verifier {
   /// \brief Convert MarkedSource-valued facts to graphs.
   void ConvertMarkedSource() { convert_marked_source_ = true; }
 
+  /// \brief Check for singleton EVars.
+  /// \return true if there were singletons.
+  bool CheckForSingletonEVars() { return parser_.CheckForSingletonEVars(); }
+
  private:
   /// \brief Generate a VName that will not conflict with any other VName.
   AstNode *NewUniqueVName(const yy::location &loc);
@@ -192,7 +196,7 @@ class Verifier {
   /// \return null if something went wrong; otherwise, an AstNode corresponding
   /// to a VName of a synthetic node for `marked_source`.
   AstNode *ConvertMarkedSource(const yy::location &loc,
-                               const kythe::proto::MarkedSource &marked_source);
+                               const kythe::proto::common::MarkedSource &marked_source);
 
   /// \brief Converts a VName proto to its AST representation.
   AstNode *ConvertVName(const yy::location &location,

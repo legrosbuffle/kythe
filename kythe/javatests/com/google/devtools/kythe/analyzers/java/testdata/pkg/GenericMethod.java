@@ -17,7 +17,6 @@ public final class GenericMethod {
   //- Wildcard0.node/kind absvar
   //- !{ Wildcard0 bounded/upper Anything0
   //-    Wildcard0 bounded/lower Anything1 }
-  //- WildcardParam1Type named vname("pkg.GenericMethod.Optional<?>","","","","java")
   private static void wildcard(Optional<?> ovar) {}
 
   //- @#0T defines/binding TVWVar
@@ -33,8 +32,7 @@ public final class GenericMethod {
   //- VWParam1Type.node/kind tapp
   //- VWParam1Type param.0 OptionalClass
   //- VWParam1Type param.1 TVWVar
-  //- !{ TVWVar bounded/upper Anything0
-  //-    TVWVar bounded/lower Anything1 }
-  //- VWParam1Type named vname("pkg.GenericMethod.Optional<pkg.GenericMethod.<T>verboseWildcard(pkg.GenericMethod.Optional<T>)~T>", "", "", "", "java")
+  //- !{ TVWVar bounded/upper.0 Anything0
+  //-    TVWVar bounded/lower.0 Anything1 }
   private static <T> void verboseWildcard(Optional<T> ovar) {}
 }

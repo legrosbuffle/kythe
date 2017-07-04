@@ -31,6 +31,8 @@ import com.google.devtools.kythe.proto.Analysis.CompilationUnit;
 import com.google.devtools.kythe.proto.Storage.Entry;
 import com.google.devtools.kythe.proto.Storage.VName;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.TextFormat;
+import java.util.Optional;
 
 /** Abstract CompilationAnalyzer that handles common boilerplate code. */
 public abstract class AbstractCompilationAnalyzer {
@@ -56,7 +58,14 @@ public abstract class AbstractCompilationAnalyzer {
     Preconditions.checkNotNull(req, "AnalysisRequest must be non-null");
     Stopwatch timer = Stopwatch.createStarted();
     try (FileDataProvider fileData = parseFileDataService(req.getFileDataService())) {
-      analyzeCompilation(req.getCompilation(), fileData, emitter);
+      String revision = req.getRevision();
+      if (revision.isEmpty()) {
+        revision = null;
+      }
+      logger.infofmt(
+          "Analyzing compilation: {%s}",
+          TextFormat.shortDebugString(req.getCompilation().getVName()));
+      analyzeCompilation(req.getCompilation(), Optional.ofNullable(revision), fileData, emitter);
     } catch (Throwable t) {
       logger.warningfmt("Uncaught exception: %s", t);
       t.printStackTrace();
@@ -83,7 +92,10 @@ public abstract class AbstractCompilationAnalyzer {
    * {@link FileDataProvider} and {@link FactEmitter} should no longer be used.
    */
   protected abstract void analyzeCompilation(
-      CompilationUnit compilationUnit, FileDataProvider fileDataProvider, FactEmitter emitter)
+      CompilationUnit compilationUnit,
+      Optional<String> revision,
+      FileDataProvider fileDataProvider,
+      FactEmitter emitter)
       throws AnalysisException;
 
   /**

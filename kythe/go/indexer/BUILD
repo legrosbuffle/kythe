@@ -12,14 +12,19 @@ go_library(
     ],
     deps = [
         "//kythe/go/extractors/govname",
+        "//kythe/go/util/metadata",
+        "//kythe/go/util/ptypes",
         "//kythe/go/util/schema/edges",
         "//kythe/go/util/schema/facts",
         "//kythe/go/util/schema/nodes",
         "//kythe/proto:analysis_proto_go",
+        "//kythe/proto:common_proto_go",
+        "//kythe/proto:go_proto_go",
         "//kythe/proto:storage_proto_go",
         "@go_protobuf//:proto",
         "@go_stringset//:stringset",
         "@go_x_tools//:go/gcexportdata",
+        "@go_x_tools//:go/types/typeutil",
     ],
 )
 
@@ -30,7 +35,10 @@ go_test(
     # TODO(fromberger): Build this with a library rule.
     data = [":testdata/foo.a"],
     library = ":indexer",
-    deps = ["@go_protobuf//:proto"],
+    deps = [
+        "//kythe/go/test/testutil",
+        "@go_protobuf//:proto",
+    ],
 )
 
 load(":testdata/go_indexer_test.bzl", "go_indexer_test")
@@ -97,4 +105,87 @@ go_indexer_test(
 go_indexer_test(
     name = "unsafe_test",
     srcs = ["testdata/unsafe.go"],
+)
+
+go_indexer_test(
+    name = "satisfies_test",
+    srcs = ["testdata/basic/satisfies.go"],
+)
+
+go_indexer_test(
+    name = "structref_test",
+    srcs = ["testdata/basic/structref.go"],
+)
+
+go_indexer_test(
+    name = "code_function_test",
+    srcs = ["testdata/code/funcdecl.go"],
+    has_marked_source = True,
+    import_path = "funcdecl",
+)
+
+go_indexer_test(
+    name = "code_interface_test",
+    srcs = ["testdata/code/interface.go"],
+    has_marked_source = True,
+    import_path = "test/iface",
+)
+
+go_indexer_test(
+    name = "code_var_test",
+    srcs = ["testdata/code/pkgvar.go"],
+    has_marked_source = True,
+    import_path = "pkgvar",
+)
+
+go_indexer_test(
+    name = "code_struct_test",
+    srcs = ["testdata/code/structtype.go"],
+    has_marked_source = True,
+    import_path = "structtype",
+)
+
+go_indexer_test(
+    name = "code_method_test",
+    srcs = ["testdata/code/methdecl.go"],
+    has_marked_source = True,
+    import_path = "methdecl",
+)
+
+go_indexer_test(
+    name = "override_test",
+    srcs = ["testdata/override.go"],
+)
+
+go_indexer_test(
+    name = "metadata_test",
+    srcs = ["testdata/meta.go"],
+    data = ["testdata/meta.go.linkage"],
+    metadata_suffix = ".linkage",
+)
+
+go_indexer_test(
+    name = "anchors_test",
+    srcs = ["testdata/basic/anchors.go"],
+)
+
+go_indexer_test(
+    name = "anonymous_test",
+    srcs = ["testdata/basic/anonymous.go"],
+)
+
+go_indexer_test(
+    name = "structinit_test",
+    srcs = ["testdata/structinit.go"],
+)
+
+load(":testdata/go_indexer_test.bzl", "go_integration_test")
+
+go_integration_test(
+    name = "marked_source_integration_test",
+    srcs = ["testdata/integration/marked_source.go"],
+    file_tickets = [
+        "kythe:?path=src/test/marked_source/marked_source.go",
+    ],
+    has_marked_source = True,
 )

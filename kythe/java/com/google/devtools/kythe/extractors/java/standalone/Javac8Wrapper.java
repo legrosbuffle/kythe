@@ -16,6 +16,7 @@
 
 package com.google.devtools.kythe.extractors.java.standalone;
 
+import com.google.common.base.Optional;
 import com.google.devtools.kythe.extractors.java.JavaCompilationUnitExtractor;
 import com.google.devtools.kythe.extractors.shared.CompilationDescription;
 import com.sun.tools.javac.file.JavacFileManager;
@@ -23,10 +24,14 @@ import com.sun.tools.javac.main.Arguments;
 import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.Options;
+import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import javax.tools.JavaFileObject;
+import javax.tools.StandardLocation;
 
 /** A class that wraps javac to extract compilation information and write it to an index file. */
 public class Javac8Wrapper extends AbstractJavacWrapper {
@@ -50,21 +55,21 @@ public class Javac8Wrapper extends AbstractJavacWrapper {
     }
 
     // Retrieve the list of class paths provided by the -classpath argument.
-    List<String> classPaths = splitPaths(options.get(Option.CLASSPATH));
+    List<String> classPaths = splitPaths(options.get(Option.CLASS_PATH));
 
     // Retrieve the list of source paths provided by the -sourcepath argument.
-    List<String> sourcePaths = splitPaths(options.get(Option.SOURCEPATH));
+    List<String> sourcePaths = splitPaths(options.get(Option.SOURCE_PATH));
 
     // Retrieve the list of processor paths provided by the -processorpath argument.
-    List<String> processorPaths = splitPaths(options.get(Option.PROCESSORPATH));
+    List<String> processorPaths = splitPaths(options.get(Option.PROCESSOR_PATH));
 
     // Retrieve the list of processors provided by the -processor argument.
     List<String> processors = splitCSV(options.get(Option.PROCESSOR));
 
     EnumSet<Option> claimed =
         EnumSet.of(
-            Option.CLASSPATH, Option.SOURCEPATH,
-            Option.PROCESSORPATH, Option.PROCESSOR);
+            Option.CLASS_PATH, Option.SOURCE_PATH,
+            Option.PROCESSOR_PATH, Option.PROCESSOR);
 
     // Retrieve all other javac options.
     List<String> completeOptions = new ArrayList<>();
@@ -72,16 +77,21 @@ public class Javac8Wrapper extends AbstractJavacWrapper {
       if (!claimed.contains(opt)) {
         String value = options.get(opt);
         if (value != null) {
-          if (opt.getText().endsWith(":")) {
-            completeOptions.add(opt.getText() + value);
+          if (opt.getPrimaryName().endsWith(":")) {
+            completeOptions.add(opt.getPrimaryName() + value);
           } else {
-            completeOptions.add(opt.getText());
-            if (!value.equals(opt.getText())) {
+            completeOptions.add(opt.getPrimaryName());
+            if (!value.equals(opt.getPrimaryName())) {
               completeOptions.add(value);
             }
           }
         }
       }
+    }
+
+    List<String> bootclasspath = new ArrayList<>();
+    for (File bcp : fileManager.getLocation(StandardLocation.PLATFORM_CLASS_PATH)) {
+      bootclasspath.add(bcp.toString());
     }
 
     // Get the output directory for this target.
@@ -90,15 +100,20 @@ public class Javac8Wrapper extends AbstractJavacWrapper {
       outputDirectory = ".";
     }
 
+    // Find generated source directory by the -s argument.
+    Optional<Path> genSrcDir = Optional.fromNullable(options.get(Option.S)).transform(Paths::get);
+
     String analysisTarget =
         readEnvironmentVariable("KYTHE_ANALYSIS_TARGET", createTargetFromSourceFiles(sources));
     return javaCompilationUnitExtractor.extract(
         analysisTarget,
         sources,
         classPaths,
+        bootclasspath,
         sourcePaths,
         processorPaths,
         processors,
+        genSrcDir,
         completeOptions,
         outputDirectory);
   }

@@ -52,9 +52,9 @@ static bool SpellingLocIsImaginary(const clang::SourceManager &SM,
 /// \param LO The LangOptions used to check the input AST.
 /// \param Decl The VarDecl that may belong to a flag.
 /// \param RefLoc If valid, the location of the reference made to Decl.
-static clang::SourceRange
-GetVarDeclFlagDeclLoc(const clang::LangOptions &LO, const clang::VarDecl *Decl,
-                      clang::SourceLocation RefLoc = clang::SourceLocation()) {
+static clang::SourceRange GetVarDeclFlagDeclLoc(
+    const clang::LangOptions &LO, const clang::VarDecl *Decl,
+    clang::SourceLocation RefLoc = clang::SourceLocation()) {
   // Quickly bail out if this isn't "FLAGS_foo":
   if (!Decl->getName().startswith("FLAGS_")) {
     return clang::SourceLocation();
@@ -190,7 +190,7 @@ void GoogleFlagsLibrarySupport::InspectVariable(
     FlagNameId.Path = FlagName.str();
     FlagNameId.EqClass = GraphObserver::NameId::NameEqClass::None;
     GraphObserver::NodeId FlagNodeId = NodeIdForFlag(NodeId);
-    GO.recordUserDefinedNode(FlagNameId, FlagNodeId, "google/gflag", Compl);
+    GO.recordUserDefinedNode(FlagNodeId, "google/gflag", Compl);
     if (auto RCC = V.ExplicitRangeInCurrentContext(Range)) {
       GO.recordDefinitionBindingRange(RCC.primary(), FlagNodeId);
       clang::FileID DeclFile =
@@ -231,4 +231,4 @@ void GoogleFlagsLibrarySupport::InspectDeclRef(
                              GraphObserver::Claimability::Unclaimable);
   }
 }
-}
+}  // namespace kythe

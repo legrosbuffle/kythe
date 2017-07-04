@@ -47,7 +47,6 @@ namespace kythe {
 namespace {
 
 using clang::SourceLocation;
-using llvm::StringRef;
 
 class AnchorMarkTest : public ::testing::Test {
  protected:
@@ -59,8 +58,9 @@ class AnchorMarkTest : public ::testing::Test {
     bool operator!=(const ClaimToken&) const override { return true; }
   };
   MiniAnchor MakeMini(size_t begin, size_t end, const std::string& id) {
-    return MiniAnchor{begin, end, GraphObserver::NodeId::CreateUncompressed(
-                                      &empty_token_, id)};
+    return MiniAnchor{
+        begin, end,
+        GraphObserver::NodeId::CreateUncompressed(&empty_token_, id)};
   }
   EmptyToken empty_token_;
 };

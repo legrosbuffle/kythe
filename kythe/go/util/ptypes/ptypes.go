@@ -20,10 +20,12 @@
 package ptypes
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
+	ianypb "github.com/golang/protobuf/ptypes/any"
 
 	anypb "kythe.io/third_party/proto/any_proto"
 )
@@ -49,3 +51,22 @@ func MarshalAny(pb proto.Message) (*anypb.Any, error) {
 		Value:   internalAny.Value,
 	}, nil
 }
+
+// UnmarshalAny unmarshals a google.protobuf.Any message into pb.
+func UnmarshalAny(any *anypb.Any, pb proto.Message) error {
+	// As in MarshalAny, we have to work around the ptypes package vendoring.
+	return ptypes.UnmarshalAny(&ianypb.Any{
+		TypeUrl: any.TypeUrl,
+		Value:   any.Value,
+	}, pb)
+}
+
+// SortByTypeURL orders a slice of Any messages by their type URL, modifying
+// the argument slice in-place.
+func SortByTypeURL(msgs []*anypb.Any) { sort.Sort(byTypeURL(msgs)) }
+
+type byTypeURL []*anypb.Any
+
+func (b byTypeURL) Len() int           { return len(b) }
+func (b byTypeURL) Less(i, j int) bool { return b[i].TypeUrl < b[j].TypeUrl }
+func (b byTypeURL) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }

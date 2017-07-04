@@ -106,6 +106,18 @@ void AssertionParser::Error(const std::string &message) {
   had_errors_ = true;
 }
 
+bool AssertionParser::CheckForSingletonEVars() {
+  bool old_had_errors = had_errors_;
+  for (const auto &singleton : singleton_evars_) {
+    Error(singleton.first->location(),
+          "singleton variable " +
+              verifier_.symbol_table()->text(singleton.second) +
+              " used only here");
+  }
+  had_errors_ = old_had_errors;
+  return !singleton_evars_.empty();
+}
+
 AssertionParser::AssertionParser(Verifier *verifier, bool trace_lex,
                                  bool trace_parse)
     : verifier_(*verifier),
@@ -165,18 +177,28 @@ void AssertionParser::PushAbsoluteLocationSpec(const std::string &for_token,
 
 void AssertionParser::SetTopLocationSpecMatchNumber(const std::string &number) {
   if (!location_spec_stack_.empty()) {
+    // number is "#"{blank}*{int}
     location_spec_stack_.back().must_be_unambiguous = false;
-    location_spec_stack_.back().match_number = atoi(number.c_str());
+    location_spec_stack_.back().match_number = atoi(number.c_str() + 1);
   }
 }
 
 Identifier *AssertionParser::PathIdentifierFor(
     const yy::location &location, const std::string &path_frag,
     const std::string &default_root) {
-  if (path_frag.size() == 0) {
+  if (path_frag.empty()) {
     return verifier_.IdentifierFor(location, "/");
-  } else if (path_frag[0] != '/') {
-    return verifier_.IdentifierFor(location, default_root + path_frag);
+  }
+  std::string sigil;
+  if (path_frag[0] == '#' || path_frag[0] == '%') {
+    sigil = path_frag[0];
+    if (path_frag.size() == 1) {
+      return verifier_.IdentifierFor(location, sigil);
+    }
+  }
+  if (path_frag[sigil.size()] != '/') {
+    return verifier_.IdentifierFor(
+        location, sigil + default_root + path_frag.substr(sigil.size()));
   }
   return verifier_.IdentifierFor(location, path_frag);
 }
@@ -218,6 +240,7 @@ AstNode *AssertionParser::CreateInspect(const yy::location &location,
                                         const std::string &inspect_id,
                                         AstNode *to_inspect) {
   if (EVar *evar = to_inspect->AsEVar()) {
+    singleton_evars_.erase(evar);
     inspections_.emplace_back(inspect_id, evar, Inspection::Kind::EXPLICIT);
     return to_inspect;
   } else {
@@ -232,7 +255,9 @@ AstNode *AssertionParser::CreateDontCare(const yy::location &location) {
 
 AstNode *AssertionParser::CreateAtom(const yy::location &location,
                                      const std::string &for_token) {
-  if (for_token.size() && isupper(for_token[0])) {
+  if (!for_token.empty() && for_token[0] == '_') {
+    return CreateDontCare(location);
+  } else if (!for_token.empty() && isupper(for_token[0])) {
     return CreateEVar(location, for_token);
   } else {
     return CreateIdentifier(location, for_token);
@@ -263,8 +288,10 @@ EVar *AssertionParser::CreateEVar(const yy::location &location,
       inspections_.emplace_back(for_token, new_evar,
                                 Inspection::Kind::IMPLICIT);
     }
+    singleton_evars_[new_evar] = symbol;
     return new_evar;
   } else {
+    singleton_evars_.erase(old_binding->second);
     return old_binding->second;
   }
 }
@@ -274,7 +301,7 @@ bool AssertionParser::ValidateTopLocationSpec(const yy::location &location,
                                               bool *use_line_number,
                                               bool *must_be_unambiguous,
                                               int *match_number) {
-  if (!location_spec_stack_.size()) {
+  if (location_spec_stack_.empty()) {
     Error(location, "No locations on location stack.");
     return verifier_.empty_string_id();
   }
@@ -347,12 +374,12 @@ bool AssertionParser::ResolveLocations(const yy::location &end_of_line,
     EVar *evar = record.anchor_evar;
     std::string &token = record.anchor_text;
     yy::location location = evar->location();
+    location.columns(token.size());
     if (record.use_line_number &&
         (record.line_number != end_of_line.begin.line)) {
       if (end_of_file) {
-        Error(location,
-              token + ":" + std::to_string(record.line_number) +
-                  " not found before end of file.");
+        Error(location, token + ":" + std::to_string(record.line_number) +
+                            " not found before end of file.");
         was_ok = false;
       } else {
         succ_lines.push_back(record);
@@ -382,9 +409,8 @@ bool AssertionParser::ResolveLocations(const yy::location &end_of_line,
         ++match_number;
       }
       if (match_number != record.match_number) {
-        Error(location,
-              token + " has no match #" + std::to_string(record.match_number) +
-                  ".");
+        Error(location, token + " has no match #" +
+                            std::to_string(record.match_number) + ".");
         was_ok = false;
         continue;
       }
@@ -416,13 +442,12 @@ bool AssertionParser::ResolveLocations(const yy::location &end_of_line,
                                         "." + std::to_string(col),
                                     evar, Inspection::Kind::IMPLICIT);
         }
-        AppendGoal(
-            group_id,
-            verifier_.MakePredicate(
-                location, verifier_.eq_id(),
-                {new (verifier_.arena()) Range(location, line_start + col,
-                                               line_start + col + token.size()),
-                 evar}));
+        AppendGoal(group_id, verifier_.MakePredicate(
+                                 location, verifier_.eq_id(),
+                                 {new (verifier_.arena())
+                                      Range(location, line_start + col,
+                                            line_start + col + token.size()),
+                                  evar}));
         break;
     }
   }

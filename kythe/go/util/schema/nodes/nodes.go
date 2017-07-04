@@ -19,21 +19,24 @@ package nodes
 
 // Node kind labels
 const (
-	Anchor    = "anchor"
-	Constant  = "constant"
-	Doc       = "doc"
-	EnumK     = "enum"
-	File      = "file"
-	Function  = "function"
-	Interface = "interface"
-	Name      = "name"
-	Package   = "package"
-	Record    = "record"
-	TAlias    = "talias"
-	TApp      = "tapp"
-	TBuiltin  = "tbuiltin"
-	TNominal  = "tnominal"
-	Variable  = "variable"
+	Abs        = "abs"
+	Anchor     = "anchor"
+	Constant   = "constant"
+	Diagnostic = "diagnostic"
+	Doc        = "doc"
+	EnumK      = "enum"
+	File       = "file"
+	Function   = "function"
+	Interface  = "interface"
+	Name       = "name"
+	Package    = "package"
+	Record     = "record"
+	Symbol     = "symbol"
+	TAlias     = "talias"
+	TApp       = "tapp"
+	TBuiltin   = "tbuiltin"
+	TNominal   = "tnominal"
+	Variable   = "variable"
 )
 
 // Node subkinds
@@ -44,4 +47,6 @@ const (
 	Enum      = "enum"
 	EnumClass = "enumClass"
 	Implicit  = "implicit"
+	Field     = "field"
+	Type      = "type"
 )

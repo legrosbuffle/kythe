@@ -37,9 +37,12 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/token"
 	"go/types"
+	"io"
+	"io/ioutil"
 	"log"
 	"path/filepath"
 	"strconv"
@@ -50,8 +53,12 @@ import (
 	"golang.org/x/tools/go/gcexportdata"
 
 	"kythe.io/kythe/go/extractors/govname"
+	"kythe.io/kythe/go/util/metadata"
+	"kythe.io/kythe/go/util/ptypes"
 
 	apb "kythe.io/kythe/proto/analysis_proto"
+	cpb "kythe.io/kythe/proto/common_proto"
+	gopb "kythe.io/kythe/proto/go_proto"
 	spb "kythe.io/kythe/proto/storage_proto"
 )
 
@@ -73,6 +80,7 @@ type PackageInfo struct {
 	FileSet      *token.FileSet                // Location info for the source files
 	Files        []*ast.File                   // The parsed ASTs of the source files
 	SourceText   map[*ast.File]string          // The text of the source files
+	Rules        map[*ast.File]metadata.Rules  // Mapping metadata for each source file
 
 	Info   *types.Info // If non-nil, contains type-checker results
 	Errors []error     // All errors reported by the type checker
@@ -108,6 +116,9 @@ type PackageInfo struct {
 
 	// The number of package-level init declarations seen.
 	numInits int
+
+	// The Go-specific details from the compilation record.
+	details *gopb.GoDetails
 }
 
 type funcInfo struct {
@@ -152,29 +163,74 @@ func (pi *packageImporter) Import(importPath string) (*types.Package, error) {
 	return nil, fmt.Errorf("package %q not found", importPath)
 }
 
+// ResolveOptions control the behaviour of the Resolve function. A nil options
+// pointer provides default values.
+type ResolveOptions struct {
+	// Passes a value whose non-nil map fields will be filled in by the type
+	// checker during resolution. The value will also be copied to the Info
+	// field of the PackageInfo returned by Resolve.
+	Info *types.Info
+
+	// If set, this function is called for each required input to check whether
+	// it contains metadata rules.
+	//
+	// Valid return are:
+	//    rs, nil    -- a valid ruleset
+	//    nil, nil   -- no ruleset found
+	//    _, err     -- an error attempting to load a ruleset
+	//
+	CheckRules func(ri *apb.CompilationUnit_FileInput, f Fetcher) (*Ruleset, error)
+}
+
+func (r *ResolveOptions) info() *types.Info {
+	if r != nil {
+		return r.Info
+	}
+	return nil
+}
+
+func (r *ResolveOptions) checkRules(ri *apb.CompilationUnit_FileInput, f Fetcher) (*Ruleset, error) {
+	if r == nil || r.CheckRules == nil {
+		return nil, nil
+	}
+	return r.CheckRules(ri, f)
+}
+
+// A Ruleset represents a collection of mapping rules applicable to a source
+// file in a compilation to be indexed.
+type Ruleset struct {
+	Path  string         // the file path this rule set applies to
+	Rules metadata.Rules // the rules that apply to the path
+}
+
 // Resolve resolves the package information for unit and its dependencies.  On
 // success the package corresponding to unit is located via ImportPath in the
 // Packages map of the returned value.
-//
-// If info != nil, it is used to populate the Info field of the return value
-// and will contain the output of the type checker in each user-provided map
-// field.
-func Resolve(unit *apb.CompilationUnit, f Fetcher, info *types.Info) (*PackageInfo, error) {
+func Resolve(unit *apb.CompilationUnit, f Fetcher, opts *ResolveOptions) (*PackageInfo, error) {
 	sourceFiles := stringset.New(unit.SourceFile...)
 
 	imap := make(map[string]*spb.VName)     // import path → vname
 	srcs := make(map[*ast.File]string)      // file → text
 	fmap := make(map[string]*apb.FileInfo)  // import path → file info
+	smap := make(map[string]*ast.File)      // file path → file (sources)
 	filev := make(map[*ast.File]*spb.VName) // file → vname
 	floc := make(map[*token.File]*ast.File) // file → ast
 	fset := token.NewFileSet()              // location info for the parser
-	goRoot := getenv("GOROOT", unit)
+	details := goDetails(unit)
 	var files []*ast.File // parsed sources
+	var rules []*Ruleset  // parsed linkage rules
 
 	// Classify the required inputs as either sources, which are to be parsed,
 	// or dependencies, which are to be "imported" via the type-checker's
 	// import mechanism.  If successful, this populates fset and files with the
 	// lexical and syntactic content of the package's own sources.
+	//
+	// The build context is used to check build tags.
+	bc := &build.Context{
+		GOOS:      details.GetGoos(),
+		GOARCH:    details.GetGoarch(),
+		BuildTags: details.GetBuildTags(),
+	}
 	for _, ri := range unit.RequiredInput {
 		if ri.Info == nil {
 			return nil, errors.New("required input file info missing")
@@ -187,6 +243,10 @@ func Resolve(unit *apb.CompilationUnit, f Fetcher, info *types.Info) (*PackageIn
 			data, err := f.Fetch(fpath, ri.Info.Digest)
 			if err != nil {
 				return nil, fmt.Errorf("fetching %q (%s): %v", fpath, ri.Info.Digest, err)
+			}
+			if !matchesBuildTags(fpath, data, bc) {
+				log.Printf("Skipped source file %q because build tags do not match", fpath)
+				continue
 			}
 			vpath := ri.VName.GetPath()
 			if vpath == "" {
@@ -208,6 +268,16 @@ func Resolve(unit *apb.CompilationUnit, f Fetcher, info *types.Info) (*PackageIn
 			vname.Path = vpath
 			filev[parsed] = vname
 			srcs[parsed] = string(data)
+			smap[fpath] = parsed
+			continue
+		}
+
+		// Check for mapping metadata.
+		if rs, err := opts.checkRules(ri, f); err != nil {
+			log.Printf("Error checking rules in %q: %v", fpath, err)
+		} else if rs != nil {
+			log.Printf("Found %d metadata rules for path %q", len(rs.Rules), rs.Path)
+			rules = append(rules, rs)
 			continue
 		}
 
@@ -219,7 +289,7 @@ func Resolve(unit *apb.CompilationUnit, f Fetcher, info *types.Info) (*PackageIn
 			return nil, fmt.Errorf("missing vname for %q", fpath)
 		}
 
-		ipath := vnameToImport(ri.VName, goRoot)
+		ipath := vnameToImport(ri.VName, details.GetGoroot())
 		imap[ipath] = ri.VName
 		fmap[ipath] = ri.Info
 	}
@@ -239,10 +309,10 @@ func Resolve(unit *apb.CompilationUnit, f Fetcher, info *types.Info) (*PackageIn
 
 	pi := &PackageInfo{
 		Name:         files[0].Name.Name,
-		ImportPath:   vnameToImport(unit.VName, goRoot),
+		ImportPath:   vnameToImport(unit.VName, details.GetGoroot()),
 		FileSet:      fset,
 		Files:        files,
-		Info:         info,
+		Info:         opts.info(),
 		SourceText:   srcs,
 		PackageVName: make(map[*types.Package]*spb.VName),
 		Dependencies: make(map[string]*types.Package), // :: import path → package
@@ -251,6 +321,18 @@ func Resolve(unit *apb.CompilationUnit, f Fetcher, info *types.Info) (*PackageIn
 		sigs:      make(map[types.Object]string),
 		fileVName: filev,
 		fileLoc:   floc,
+		details:   details,
+	}
+
+	// If mapping rules were found, populate the corresponding field.
+	if len(rules) != 0 {
+		pi.Rules = make(map[*ast.File]metadata.Rules)
+		for _, rs := range rules {
+			f, ok := smap[rs.Path]
+			if ok {
+				pi.Rules[f] = rs.Rules
+			}
+		}
 	}
 
 	// Run the type-checker and collect any errors it generates.  Errors in the
@@ -337,6 +419,177 @@ func (pi *PackageInfo) ObjectVName(obj types.Object) *spb.VName {
 	return vname
 }
 
+// MarkedSource returns a MarkedSource message describing obj.
+// See: http://www.kythe.io/docs/schema/marked-source.html.
+func (pi *PackageInfo) MarkedSource(obj types.Object) *cpb.MarkedSource {
+	ms := &cpb.MarkedSource{
+		Child: []*cpb.MarkedSource{{
+			Kind:    cpb.MarkedSource_IDENTIFIER,
+			PreText: objectName(obj),
+		}},
+	}
+
+	// Include the package name as context, and for objects that hang off a
+	// named struct or interface, a label for that type.
+	//
+	// For example, given
+	//     package p
+	//     var v int                // context is "p"
+	//     type s struct { v int }  // context is "p.s"
+	//
+	// The tree structure is:
+	//
+	//                 (box)
+	//                   |
+	//         (ctx)-----+-------(id)
+	//           |                |
+	//     +----"."----+(".")    name
+	//     |           |
+	//    pkg         type
+	//
+	var ctx []*cpb.MarkedSource
+	if pkg := obj.Pkg(); pkg != nil {
+		ctx = append(ctx, &cpb.MarkedSource{
+			PreText: pi.importPath(pkg),
+		})
+	}
+	if par, ok := pi.owner[obj]; ok {
+		if _, ok := par.Type().(*types.Named); ok {
+			ctx = append(ctx, &cpb.MarkedSource{
+				PreText: typeName(par.Type()),
+			})
+		}
+	}
+	if len(ctx) != 0 {
+		ms.Child = append([]*cpb.MarkedSource{{
+			Kind:              cpb.MarkedSource_CONTEXT,
+			PostChildText:     ".",
+			AddFinalListToken: true,
+			Child:             ctx,
+		}}, ms.Child...)
+	}
+
+	// Handle types with "interesting" superstructure specially.
+	switch t := obj.(type) {
+	case *types.Func:
+		// For functions we include the parameters and return values, and for
+		// methods the receiver.
+		//
+		// Methods:   func (R) Name(p1, ...) (r0, ...)
+		// Functions: func Name(p0, ...) (r0, ...)
+		fn := &cpb.MarkedSource{
+			Kind:  cpb.MarkedSource_BOX,
+			Child: []*cpb.MarkedSource{{PreText: "func "}},
+		}
+		sig := t.Type().(*types.Signature)
+		firstParam := 0
+		if recv := sig.Recv(); recv != nil {
+			// Parenthesized receiver type, e.g. (R).
+			fn.Child = append(fn.Child, &cpb.MarkedSource{
+				Kind:     cpb.MarkedSource_PARAMETER,
+				PreText:  "(",
+				PostText: ") ",
+				Child: []*cpb.MarkedSource{{
+					Kind:    cpb.MarkedSource_TYPE,
+					PreText: typeName(recv.Type()),
+				}},
+			})
+			firstParam = 1
+		}
+		fn.Child = append(fn.Child, ms)
+
+		// If there are no parameters, the lookup will not produce anything.
+		// Ensure when this happens we still get parentheses for notational
+		// purposes.
+		if sig.Params().Len() == 0 {
+			fn.Child = append(fn.Child, &cpb.MarkedSource{
+				Kind:    cpb.MarkedSource_PARAMETER,
+				PreText: "()",
+			})
+		} else {
+			fn.Child = append(fn.Child, &cpb.MarkedSource{
+				Kind:          cpb.MarkedSource_PARAMETER_LOOKUP_BY_PARAM,
+				PreText:       "(",
+				PostChildText: ", ",
+				PostText:      ")",
+				LookupIndex:   uint32(firstParam),
+			})
+		}
+		if res := sig.Results(); res != nil && res.Len() > 0 {
+			rms := &cpb.MarkedSource{PreText: " "}
+			if res.Len() > 1 {
+				// If there is more than one result type, parenthesize.
+				rms.PreText = " ("
+				rms.PostText = ")"
+				rms.PostChildText = ", "
+			}
+			for i := 0; i < res.Len(); i++ {
+				rms.Child = append(rms.Child, &cpb.MarkedSource{
+					PreText: objectName(res.At(i)),
+				})
+			}
+			fn.Child = append(fn.Child, rms)
+		}
+		ms = fn
+
+	case *types.Var:
+		// For variables and fields, include the type.
+		repl := &cpb.MarkedSource{
+			Kind: cpb.MarkedSource_BOX,
+			Child: []*cpb.MarkedSource{
+				ms,
+				{Kind: cpb.MarkedSource_TYPE, PreText: " "},
+				{Kind: cpb.MarkedSource_TYPE, PreText: typeName(t.Type())},
+			},
+		}
+		ms = repl
+
+	case *types.TypeName:
+		// For named types, include the underlying type.
+		repl := &cpb.MarkedSource{
+			Kind: cpb.MarkedSource_BOX,
+			Child: []*cpb.MarkedSource{
+				{PreText: "type "},
+				ms,
+				{Kind: cpb.MarkedSource_TYPE, PreText: " "},
+				{Kind: cpb.MarkedSource_TYPE, PreText: typeName(t.Type().Underlying())},
+			},
+		}
+		ms = repl
+
+	default:
+		// TODO(fromberger): Handle other variations from go/types.
+	}
+	return ms
+}
+
+// objectName returns a human-readable name for obj if one can be inferred.  If
+// the object has its own non-blank name, that is used; otherwise if the object
+// is of a named type, that type's name is used. Otherwise the result is "_".
+func objectName(obj types.Object) string {
+	if name := obj.Name(); name != "" && name != "" {
+		return name // the object's given name
+	} else if name := typeName(obj.Type()); name != "" {
+		return name // the object's type's name
+	}
+	return "_" // not sure what to call it
+}
+
+// typeName returns a human readable name for typ.
+func typeName(typ types.Type) string {
+	switch t := typ.(type) {
+	case *types.Named:
+		return t.Obj().Name()
+	case *types.Basic:
+		return t.Name()
+	case *types.Struct:
+		return "struct {...}"
+	case *types.Interface:
+		return "interface {...}"
+	}
+	return typ.String()
+}
+
 // FileVName returns a VName for path relative to the package base.
 func (pi *PackageInfo) FileVName(file *ast.File) *spb.VName {
 	if v := pi.fileVName[file]; v != nil {
@@ -353,6 +606,7 @@ func (pi *PackageInfo) FileVName(file *ast.File) *spb.VName {
 func (pi *PackageInfo) AnchorVName(file *ast.File, start, end int) *spb.VName {
 	vname := proto.Clone(pi.FileVName(file)).(*spb.VName)
 	vname.Signature = "#" + strconv.Itoa(start) + ":" + strconv.Itoa(end)
+	vname.Language = govname.Language
 	return vname
 }
 
@@ -378,12 +632,6 @@ func (pi *PackageInfo) Span(node ast.Node) (file *ast.File, start, end int) {
 		end = pi.FileSet.Position(pos).Offset
 	}
 	return
-}
-
-// Anchor returns an anchor VName and offsets for the given AST node.
-func (pi *PackageInfo) Anchor(node ast.Node) (vname *spb.VName, start, end int) {
-	file, start, end := pi.Span(node)
-	return pi.AnchorVName(file, start, end), start, end
 }
 
 const (
@@ -442,7 +690,16 @@ func (pi *PackageInfo) newSignature(obj types.Object) (tag, base string) {
 				_, base := pi.newSignature(owner)
 				return tagMethod, base + "." + t.Name()
 			}
-			return tagMethod, fmt.Sprintf("(%s).%s", recv.Type(), t.Name())
+			// If the receiver is defined in this package, fully qualify the
+			// name so references from elsewhere will work. Strictly speaking
+			// this is only necessary for exported methods, but it's simpler to
+			// do it for everything.
+			return tagMethod, fmt.Sprintf("(%s).%s", types.TypeString(recv.Type(), func(pkg *types.Package) string {
+				if pkg == pi.Package {
+					return pi.ImportPath
+				}
+				return pkg.Path()
+			}), t.Name())
 		}
 
 	case *types.TypeName:
@@ -532,7 +789,14 @@ func (pi *PackageInfo) addOwners(pkg *types.Package) {
 	for _, name := range scope.Names() {
 		switch obj := scope.Lookup(name).(type) {
 		case *types.TypeName:
-			switch t := obj.Type().Underlying().(type) {
+			// Go 1.9 will have support for type aliases.  For now, skip these
+			// so we don't wind up emitting redundant declaration sites for the
+			// aliased type.
+			named, ok := obj.Type().(*types.Named)
+			if !ok {
+				continue
+			}
+			switch t := named.Underlying().(type) {
 			case *types.Struct:
 				// Inspect the fields of a struct.
 				for i := 0; i < t.NumFields(); i++ {
@@ -577,6 +841,40 @@ func (pi *PackageInfo) addOwners(pkg *types.Package) {
 	}
 }
 
+// findFieldName tries to resolve the identifier that names an embedded
+// anonymous field declaration at expr, and reports whether successful.
+func (pi *PackageInfo) findFieldName(expr ast.Expr) (id *ast.Ident, ok bool) {
+	// There are three cases we care about here:
+	//
+	// A bare identifier (foo), which refers to a type defined in
+	// this package, or a builtin type,
+	//
+	// A selector expression (pkg.Foo) referring to an exported
+	// type defined in another package, or
+	//
+	// A pointer to either of these.
+
+	switch t := expr.(type) {
+	case *ast.StarExpr: // *T
+		return pi.findFieldName(t.X)
+	case *ast.Ident: // T declared locally
+		return t, true
+	case *ast.SelectorExpr: // pkg.T declared elsewhere
+		return t.Sel, true
+	default:
+		// No idea what this is; possibly malformed code.
+		return nil, false
+	}
+}
+
+// importPath returns the import path of pkg.
+func (pi *PackageInfo) importPath(pkg *types.Package) string {
+	if v := pi.PackageVName[pkg]; v != nil {
+		return vnameToImport(v, pi.details.GetGoroot())
+	}
+	return pkg.Name()
+}
+
 // vnameToImport returns the putative Go import path corresponding to v.  The
 // resulting string corresponds to the string literal appearing in source at
 // the import site for the package so named.
@@ -613,15 +911,30 @@ func rootRelative(root, path string) (string, bool) {
 	return trimmed, true
 }
 
-// getenv returns the value of the specified environment variable from unit.
-// It returns "" if no such variable is defined.
-func getenv(name string, unit *apb.CompilationUnit) string {
-	for _, env := range unit.Environment {
-		if env.Name == name {
-			return env.Value
+// goDetails returns the GoDetails message attached to unit, if there is one;
+// otherwise it returns nil.
+func goDetails(unit *apb.CompilationUnit) *gopb.GoDetails {
+	for _, msg := range unit.Details {
+		var dets gopb.GoDetails
+		if err := ptypes.UnmarshalAny(msg, &dets); err == nil {
+			return &dets
 		}
 	}
-	return ""
+	return nil
+}
+
+// matchesBuildTags reports whether the file at fpath, whose content is in
+// data, would be matched by the settings in bc.
+func matchesBuildTags(fpath string, data []byte, bc *build.Context) bool {
+	dir, name := filepath.Split(fpath)
+	bc.OpenFile = func(path string) (io.ReadCloser, error) {
+		if path != fpath {
+			return nil, errors.New("file not found")
+		}
+		return ioutil.NopCloser(bytes.NewReader(data)), nil
+	}
+	match, err := bc.MatchFile(dir, name)
+	return err == nil && match
 }
 
 // AllTypeInfo creates a new types.Info value with empty maps for each of the

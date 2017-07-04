@@ -27,7 +27,7 @@ constexpr size_t kMaxRenderDepth = 10;
 /// \brief A RAII class to deal with styled div/span tags.
 class CssTag {
  public:
-  enum class Kind { Div, Span };
+  enum class Kind { Div, Span, Pre };
   /// \param kind the kind of tag to open.
   /// \param style the CSS style to apply to the tag. Must be escaped.
   /// \param buffer must outlive CssTag.
@@ -50,7 +50,7 @@ class CssTag {
     buffer->append(">");
   }
   static const char* label(Kind kind) {
-    return kind == Kind::Div ? "div" : "span";
+    return kind == Kind::Div ? "div" : (kind == Kind::Span ? "span" : "pre");
   }
   CssTag(const CssTag& o) = delete;
 
@@ -182,7 +182,7 @@ void AppendEscapedHtmlString(const SourceString& source, std::string* dest) {
 /// Target buffer for RenderSimpleIdentifier.
 class RenderSimpleIdentifierTarget {
  public:
-  /// \brief escapes and appends `source` to the buffer.
+  /// \brief Escapes and appends `source` to the buffer.
   template <typename SourceString>
   void Append(const SourceString& source) {
     if (!prepend_buffer_.empty() && !source.empty()) {
@@ -191,13 +191,21 @@ class RenderSimpleIdentifierTarget {
     }
     AppendEscapedHtmlString(source, &buffer_);
   }
-  /// \brief escapes and adds `source` before the (non-empty) text that would
+  /// \brief Escapes and adds `source` before the (non-empty) text that would
   /// be added by the next call to `Append`.
   template <typename SourceString>
   void AppendFinalListToken(const SourceString& source) {
     prepend_buffer_.append(std::string(source));
   }
   const std::string buffer() const { return buffer_; }
+  void AppendRaw(const std::string& text) { buffer_.append(text); }
+  /// \brief Make sure that there's a space between the current content of the
+  /// buffer and whatever is appended to it later on.
+  void AppendHeuristicSpace() {
+    if (!buffer_.empty() && buffer_[buffer_.size() - 1] != ' ') {
+      prepend_buffer_.push_back(' ');
+    }
+  }
 
  private:
   /// The buffer used to hold escaped data.
@@ -209,38 +217,104 @@ class RenderSimpleIdentifierTarget {
 
 /// State while recursing through MarkedSource for RenderSimpleIdentifier.
 struct RenderSimpleIdentifierState {
+  const HtmlRendererOptions* options = nullptr;
   bool render_identifier = false;
   bool render_context = false;
+  bool render_types = false;
+  bool render_parameters = false;
+  bool render_initializer = false;
   bool in_identifier = false;
   bool in_context = false;
+  bool in_parameter = false;
+  bool in_type = false;
+  bool in_initializer = false;
+  bool linkify = false;
+  std::string get_link(const proto::common::MarkedSource& sig) {
+    if (options == nullptr || !linkify) {
+      return "";
+    }
+    std::string link;
+    for (const auto& plink : sig.link()) {
+      for (const auto& ptick : plink.definition()) {
+        if (const auto* node_info = options->node_info(ptick)) {
+          if (const auto* anchor =
+                  options->anchor_for_ticket(node_info->definition())) {
+            link = options->make_semantic_link_uri(*anchor, ptick);
+            if (link.empty()) {
+              link = options->make_link_uri(*anchor);
+            }
+          }
+        }
+      }
+    }
+    return link;
+  }
   bool should_render() const {
     return (render_context && in_context) ||
-           (render_identifier && in_identifier);
+           (render_identifier && in_identifier) ||
+           (render_parameters && in_parameter) || (render_types && in_type) ||
+           (render_initializer && in_initializer);
   }
 };
 
-void RenderSimpleIdentifier(const proto::MarkedSource& sig,
+void RenderSimpleIdentifier(const proto::common::MarkedSource& sig,
                             RenderSimpleIdentifierTarget* out,
                             RenderSimpleIdentifierState state, size_t depth) {
   if (depth >= kMaxRenderDepth) {
     return;
   }
   switch (sig.kind()) {
-    case proto::MarkedSource::IDENTIFIER:
+    case proto::common::MarkedSource::IDENTIFIER:
       state.in_identifier = true;
       break;
-    case proto::MarkedSource::CONTEXT:
+    case proto::common::MarkedSource::PARAMETER:
+      if (!state.render_parameters) {
+        return;
+      }
+      state.in_parameter = true;
+      break;
+    case proto::common::MarkedSource::TYPE:
+      if (!state.render_types) {
+        return;
+      }
+      state.in_type = true;
+      break;
+    case proto::common::MarkedSource::CONTEXT:
       if (!state.render_context) {
         return;
       }
       state.in_context = true;
       break;
-    case proto::MarkedSource::BOX:
+    case proto::common::MarkedSource::INITIALIZER:
+      if (!state.render_initializer) {
+        return;
+      }
+      state.in_initializer = true;
+      break;
+    case proto::common::MarkedSource::BOX:
       break;
     default:
       return;
   }
+  bool has_open_link = false;
   if (state.should_render()) {
+    std::string link_text = state.get_link(sig);
+    if (!link_text.empty()) {
+      out->AppendRaw("<a href=\"");
+      out->AppendRaw(link_text);
+      out->AppendRaw("\" title=\"");
+      {
+        RenderSimpleIdentifierTarget target;
+        RenderSimpleIdentifierState state;
+        state.render_identifier = true;
+        state.render_context = true;
+        state.render_types = true;
+        RenderSimpleIdentifier(sig, &target, state, 0);
+        out->AppendRaw(target.buffer());
+      }
+      out->AppendRaw("\">");
+      has_open_link = true;
+    }
     out->Append(sig.pre_text());
   }
   for (int child = 0; child < sig.child_size(); ++child) {
@@ -255,23 +329,29 @@ void RenderSimpleIdentifier(const proto::MarkedSource& sig,
   }
   if (state.should_render()) {
     out->Append(sig.post_text());
+    if (has_open_link) {
+      out->AppendRaw("</a>");
+    }
+    if (sig.kind() == proto::common::MarkedSource::TYPE) {
+      out->AppendHeuristicSpace();
+    }
   }
 }
 
 /// Render identifiers underneath PARAMETER nodes with no other non-BOXes in
 /// between.
-void RenderSimpleParams(const proto::MarkedSource& sig,
+void RenderSimpleParams(const proto::common::MarkedSource& sig,
                         std::vector<std::string>* out, size_t depth) {
   if (depth >= kMaxRenderDepth) {
     return;
   }
   switch (sig.kind()) {
-    case proto::MarkedSource::BOX:
+    case proto::common::MarkedSource::BOX:
       for (const auto& child : sig.child()) {
         RenderSimpleParams(child, out, depth + 1);
       }
       break;
-    case proto::MarkedSource::PARAMETER:
+    case proto::common::MarkedSource::PARAMETER:
       for (const auto& child : sig.child()) {
         out->emplace_back();
         RenderSimpleIdentifierTarget target;
@@ -300,7 +380,21 @@ const proto::Anchor* DocumentHtmlRendererOptions::anchor_for_ticket(
                                                           : &anchor->second;
 }
 
-std::string RenderSimpleIdentifier(const proto::MarkedSource& sig) {
+std::string RenderSignature(const HtmlRendererOptions& options,
+                            const proto::common::MarkedSource& sig,
+                            bool linkify) {
+  RenderSimpleIdentifierTarget target;
+  RenderSimpleIdentifierState state;
+  state.render_identifier = true;
+  state.render_types = true;
+  state.render_parameters = true;
+  state.linkify = linkify;
+  state.options = &options;
+  RenderSimpleIdentifier(sig, &target, state, 0);
+  return target.buffer();
+}
+
+std::string RenderSimpleIdentifier(const proto::common::MarkedSource& sig) {
   RenderSimpleIdentifierTarget target;
   RenderSimpleIdentifierState state;
   state.render_identifier = true;
@@ -308,7 +402,7 @@ std::string RenderSimpleIdentifier(const proto::MarkedSource& sig) {
   return target.buffer();
 }
 
-std::string RenderSimpleQualifiedName(const proto::MarkedSource& sig,
+std::string RenderSimpleQualifiedName(const proto::common::MarkedSource& sig,
                                       bool include_identifier) {
   RenderSimpleIdentifierTarget target;
   RenderSimpleIdentifierState state;
@@ -318,7 +412,16 @@ std::string RenderSimpleQualifiedName(const proto::MarkedSource& sig,
   return target.buffer();
 }
 
-std::vector<std::string> RenderSimpleParams(const proto::MarkedSource& sig) {
+std::string RenderInitializer(const proto::common::MarkedSource& sig) {
+  RenderSimpleIdentifierTarget target;
+  RenderSimpleIdentifierState state;
+  state.render_initializer = true;
+  RenderSimpleIdentifier(sig, &target, state, 0);
+  return target.buffer();
+}
+
+std::vector<std::string> RenderSimpleParams(
+    const proto::common::MarkedSource& sig) {
   std::vector<std::string> result;
   RenderSimpleParams(sig, &result, 0);
   return result;
@@ -439,7 +542,11 @@ std::string RenderHtml(const HtmlRendererOptions& options,
                         options.anchor_for_ticket(def_info->definition())) {
                   open_spans.top().valid = true;
                   out->buffer.append("<a href=\"");
-                  auto link_uri = options.make_link_uri(*def_anchor);
+                  auto link_uri =
+                      options.make_semantic_link_uri(*def_anchor, definition);
+                  if (link_uri.empty()) {
+                    link_uri = options.make_link_uri(*def_anchor);
+                  }
                   // + 2 for the closing ">.
                   out->buffer.reserve(out->buffer.size() + link_uri.size() + 2);
                   for (auto c : link_uri) {
@@ -502,7 +609,8 @@ std::string RenderDocument(
       {
         CssTag type_div(CssTag::Kind::Div, options.type_name_div, &text_out);
         CssTag type_name(CssTag::Kind::Span, options.name_span, &text_out);
-        text_out.append(RenderSimpleIdentifier(document.marked_source()));
+        text_out.append(
+            RenderSignature(options, document.marked_source(), true));
       }
       {
         CssTag detail_div(CssTag::Kind::Div, options.sig_detail_div, &text_out);
@@ -511,14 +619,54 @@ std::string RenderDocument(
           AppendEscapedHtmlString(kind_name, &text_out);
           text_out.append(" ");
         }
-        text_out.append("declared by ");
-        text_out.append(
-            RenderSimpleQualifiedName(document.marked_source(), false));
+        auto declared_context =
+            RenderSimpleQualifiedName(document.marked_source(), false);
+        if (declared_context.empty()) {
+          if (const auto* node_info = options.node_info(document.ticket())) {
+            if (const auto* anchor =
+                    options.anchor_for_ticket(node_info->definition())) {
+              auto anchor_text = options.format_location(*anchor);
+              if (!anchor_text.empty()) {
+                text_out.append("declared in ");
+                auto anchor_link =
+                    options.make_semantic_link_uri(*anchor, document.ticket());
+                if (!anchor_link.empty()) {
+                  text_out.append("<a href=\"");
+                  AppendEscapedHtmlString(anchor_link, &text_out);
+                  text_out.append("\">");
+                }
+                AppendEscapedHtmlString(anchor_text, &text_out);
+                if (!anchor_link.empty()) {
+                  text_out.append("</a>");
+                }
+              }
+            }
+          }
+        } else {
+          text_out.append("declared by ");
+          text_out.append(declared_context);
+        }
       }
     }
-    CssTag content_div(CssTag::Kind::Div, options.content_div, &text_out);
-    text_out.append(RenderPrintable(options, handlers, document.text(),
-                                    Printable::IncludeAll));
+    auto initializer = RenderInitializer(document.marked_source());
+    if (!initializer.empty()) {
+      CssTag init_div(CssTag::Kind::Div, options.initializer_div, &text_out);
+      text_out.append("Initializer: ");
+      bool multiline = initializer.find("\n") != decltype(initializer)::npos;
+      CssTag code_div(CssTag::Kind::Pre,
+                      multiline ? options.initializer_multiline_pre
+                                : options.initializer_pre,
+                      &text_out);
+      text_out.append(initializer);
+    }
+    {
+      CssTag content_div(CssTag::Kind::Div, options.content_div, &text_out);
+      text_out.append(RenderPrintable(options, handlers, document.text(),
+                                      Printable::IncludeAll));
+    }
+    for (const auto& child : document.children()) {
+      text_out.append(RenderDocument(options, handlers, child));
+    }
   }
   return text_out;
 }

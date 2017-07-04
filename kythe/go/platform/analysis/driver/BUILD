@@ -8,11 +8,13 @@ go_package_library(
     deps = [
         "//kythe/go/platform/analysis",
         "//kythe/proto:analysis_proto_go",
+        "@go_errors//:errors",
     ],
 )
 
 go_test(
     name = "driver_test",
+    size = "small",
     srcs = ["driver_test.go"],
     library = "driver",
     visibility = ["//visibility:private"],

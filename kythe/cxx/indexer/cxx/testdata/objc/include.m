@@ -9,8 +9,8 @@
 //- @Box defines/binding BoxImpl
 @implementation Box
 
-//- @"foo " defines/binding FooDefn
-//- @"foo " completes FooDecl
+//- @foo defines/binding FooDefn
+//- @foo completes FooDecl
 //- FooDefn.node/kind function
 //- FooDefn.complete definition
 //- FooDefn childof BoxImpl
@@ -19,9 +19,6 @@
 }
 
 @end
-
-//- FooDecl named FooName
-//- FooDefn named FooName
 
 int main(int argc, char **argv) {
   return 0;

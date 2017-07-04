@@ -33,8 +33,6 @@ import (
 	grpc "google.golang.org/grpc"
 )
 
-import errors "errors"
-
 import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -44,7 +42,9 @@ var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
-const _ = proto.ProtoPackageIsVersion1
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 type Location_Kind int32
 
@@ -217,32 +217,6 @@ func (CrossReferencesRequest_ReferenceKind) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptorXref, []int{3, 2}
 }
 
-type CrossReferencesRequest_DocumentationKind int32
-
-const (
-	// No documentation will be populated in the CrossReferencesReply.
-	CrossReferencesRequest_NO_DOCUMENTATION CrossReferencesRequest_DocumentationKind = 0
-	// All known documentation reached by the "/kythe/edge/documentation" edge
-	// kind (or its variants) will be populated in the CrossReferencesReply.
-	CrossReferencesRequest_ALL_DOCUMENTATION CrossReferencesRequest_DocumentationKind = 1
-)
-
-var CrossReferencesRequest_DocumentationKind_name = map[int32]string{
-	0: "NO_DOCUMENTATION",
-	1: "ALL_DOCUMENTATION",
-}
-var CrossReferencesRequest_DocumentationKind_value = map[string]int32{
-	"NO_DOCUMENTATION":  0,
-	"ALL_DOCUMENTATION": 1,
-}
-
-func (x CrossReferencesRequest_DocumentationKind) String() string {
-	return proto.EnumName(CrossReferencesRequest_DocumentationKind_name, int32(x))
-}
-func (CrossReferencesRequest_DocumentationKind) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorXref, []int{3, 3}
-}
-
 type CrossReferencesRequest_CallerKind int32
 
 const (
@@ -270,7 +244,7 @@ func (x CrossReferencesRequest_CallerKind) String() string {
 	return proto.EnumName(CrossReferencesRequest_CallerKind_name, int32(x))
 }
 func (CrossReferencesRequest_CallerKind) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorXref, []int{3, 4}
+	return fileDescriptorXref, []int{3, 3}
 }
 
 type Link_Kind int32
@@ -370,10 +344,8 @@ type Location struct {
 	Ticket string `protobuf:"bytes,1,opt,name=ticket,proto3" json:"ticket,omitempty"`
 	// What kind of location this is.
 	Kind Location_Kind `protobuf:"varint,2,opt,name=kind,proto3,enum=kythe.proto.Location_Kind" json:"kind,omitempty"`
-	// The starting point of the location.
-	Start *Location_Point `protobuf:"bytes,3,opt,name=start" json:"start,omitempty"`
-	// The ending point of the location.
-	End *Location_Point `protobuf:"bytes,4,opt,name=end" json:"end,omitempty"`
+	// If kind == SPAN, this is the represented span within the file.
+	Span *kythe_proto_common.Span `protobuf:"bytes,5,opt,name=span" json:"span,omitempty"`
 }
 
 func (m *Location) Reset()                    { *m = Location{} }
@@ -381,45 +353,26 @@ func (m *Location) String() string            { return proto.CompactTextString(m
 func (*Location) ProtoMessage()               {}
 func (*Location) Descriptor() ([]byte, []int) { return fileDescriptorXref, []int{0} }
 
-func (m *Location) GetStart() *Location_Point {
+func (m *Location) GetTicket() string {
 	if m != nil {
-		return m.Start
+		return m.Ticket
+	}
+	return ""
+}
+
+func (m *Location) GetKind() Location_Kind {
+	if m != nil {
+		return m.Kind
+	}
+	return Location_FILE
+}
+
+func (m *Location) GetSpan() *kythe_proto_common.Span {
+	if m != nil {
+		return m.Span
 	}
 	return nil
 }
-
-func (m *Location) GetEnd() *Location_Point {
-	if m != nil {
-		return m.End
-	}
-	return nil
-}
-
-// A Point represents a location within a file or buffer.
-//
-// If line_number ≤ 0, the line number and column offset are considered
-// unknown and will be ignored.
-//
-// A point with line_number > 0 is said to be _normalized_ if it satisfies
-// the constraint 0 ≤ column_offset ≤ bytelen(line_number); that is, if the
-// column_offset is within the actual range of the corresponding line.  A
-// point can be normalized by adjusting line_number and column_offset so that
-// this constraint is satisfied.  This may be impossible if the column offset
-// exceeds the bounds of the file.
-type Location_Point struct {
-	// The offset in bytes from the beginning of the file.
-	// Requires 0 ≤ byte_offset ≤ len(file).
-	ByteOffset int32 `protobuf:"varint,1,opt,name=byte_offset,json=byteOffset,proto3" json:"byte_offset,omitempty"`
-	// The line number containing the point, 1-based.
-	LineNumber int32 `protobuf:"varint,2,opt,name=line_number,json=lineNumber,proto3" json:"line_number,omitempty"`
-	// The byte offset of the point within its line.
-	ColumnOffset int32 `protobuf:"varint,3,opt,name=column_offset,json=columnOffset,proto3" json:"column_offset,omitempty"`
-}
-
-func (m *Location_Point) Reset()                    { *m = Location_Point{} }
-func (m *Location_Point) String() string            { return proto.CompactTextString(m) }
-func (*Location_Point) ProtoMessage()               {}
-func (*Location_Point) Descriptor() ([]byte, []int) { return fileDescriptorXref, []int{0, 0} }
 
 type DecorationsRequest struct {
 	// The location of the file to fetch decorations for.  The ticket of location
@@ -451,6 +404,8 @@ type DecorationsRequest struct {
 	// definition_locations field will include (where possible) the locations of
 	// the definitions of the nodes that are extended or overridden.
 	ExtendsOverrides bool `protobuf:"varint,7,opt,name=extends_overrides,json=extendsOverrides,proto3" json:"extends_overrides,omitempty"`
+	// If true, return diagnostics for the given file.
+	Diagnostics bool `protobuf:"varint,8,opt,name=diagnostics,proto3" json:"diagnostics,omitempty"`
 }
 
 func (m *DecorationsRequest) Reset()                    { *m = DecorationsRequest{} }
@@ -465,6 +420,62 @@ func (m *DecorationsRequest) GetLocation() *Location {
 	return nil
 }
 
+func (m *DecorationsRequest) GetSpanKind() DecorationsRequest_SpanKind {
+	if m != nil {
+		return m.SpanKind
+	}
+	return DecorationsRequest_WITHIN_SPAN
+}
+
+func (m *DecorationsRequest) GetDirtyBuffer() []byte {
+	if m != nil {
+		return m.DirtyBuffer
+	}
+	return nil
+}
+
+func (m *DecorationsRequest) GetSourceText() bool {
+	if m != nil {
+		return m.SourceText
+	}
+	return false
+}
+
+func (m *DecorationsRequest) GetReferences() bool {
+	if m != nil {
+		return m.References
+	}
+	return false
+}
+
+func (m *DecorationsRequest) GetTargetDefinitions() bool {
+	if m != nil {
+		return m.TargetDefinitions
+	}
+	return false
+}
+
+func (m *DecorationsRequest) GetFilter() []string {
+	if m != nil {
+		return m.Filter
+	}
+	return nil
+}
+
+func (m *DecorationsRequest) GetExtendsOverrides() bool {
+	if m != nil {
+		return m.ExtendsOverrides
+	}
+	return false
+}
+
+func (m *DecorationsRequest) GetDiagnostics() bool {
+	if m != nil {
+		return m.Diagnostics
+	}
+	return false
+}
+
 type DecorationsReply struct {
 	// The normalized location for which decorations are returned.
 	Location *Location `protobuf:"bytes,1,opt,name=location" json:"location,omitempty"`
@@ -473,11 +484,13 @@ type DecorationsReply struct {
 	Encoding   string `protobuf:"bytes,3,opt,name=encoding,proto3" json:"encoding,omitempty"`
 	// The reference edges located in the specified window.
 	Reference []*DecorationsReply_Reference `protobuf:"bytes,4,rep,name=reference" json:"reference,omitempty"`
+	// If requested, a list of diagnostics applying to the requested file location.
+	Diagnostic []*kythe_proto_common.Diagnostic `protobuf:"bytes,5,rep,name=diagnostic" json:"diagnostic,omitempty"`
 	// This field will contain one entry, keyed by ticket, for each distinct node
 	// referenced by a reference edge that has at least 1 non-filtered fact.
 	Nodes map[string]*kythe_proto_common.NodeInfo `protobuf:"bytes,15,rep,name=nodes" json:"nodes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
-	// Each anchor cited as a target definition in the references.  The map is
-	// keyed by each anchor's ticket.
+	// Each anchor cited as a target definition in the references/overrides.  The
+	// map is keyed by each anchor's ticket.
 	DefinitionLocations map[string]*Anchor `protobuf:"bytes,16,rep,name=definition_locations,json=definitionLocations" json:"definition_locations,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 	// Maps from semantic nodes on the right-hand side of defines/binding
 	// references to the list of their overrides.
@@ -496,9 +509,30 @@ func (m *DecorationsReply) GetLocation() *Location {
 	return nil
 }
 
+func (m *DecorationsReply) GetSourceText() []byte {
+	if m != nil {
+		return m.SourceText
+	}
+	return nil
+}
+
+func (m *DecorationsReply) GetEncoding() string {
+	if m != nil {
+		return m.Encoding
+	}
+	return ""
+}
+
 func (m *DecorationsReply) GetReference() []*DecorationsReply_Reference {
 	if m != nil {
 		return m.Reference
+	}
+	return nil
+}
+
+func (m *DecorationsReply) GetDiagnostic() []*kythe_proto_common.Diagnostic {
+	if m != nil {
+		return m.Diagnostic
 	}
 	return nil
 }
@@ -527,18 +561,16 @@ func (m *DecorationsReply) GetExtendsOverrides() map[string]*DecorationsReply_Ov
 // Represents a reference edge source ---KIND---> target.  Each source is an
 // anchor within the requested source location.
 type DecorationsReply_Reference struct {
-	SourceTicket string `protobuf:"bytes,1,opt,name=source_ticket,json=sourceTicket,proto3" json:"source_ticket,omitempty"`
 	TargetTicket string `protobuf:"bytes,2,opt,name=target_ticket,json=targetTicket,proto3" json:"target_ticket,omitempty"`
 	Kind         string `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
-	// Starting byte offset of this references's anchor (source_ticket) span.
-	AnchorStart *Location_Point `protobuf:"bytes,10,opt,name=anchor_start,json=anchorStart" json:"anchor_start,omitempty"`
-	// Ending byte offset of this references's anchor (source_ticket) span.
-	AnchorEnd *Location_Point `protobuf:"bytes,11,opt,name=anchor_end,json=anchorEnd" json:"anchor_end,omitempty"`
 	// Anchor ticket of the target's definition.  Populated only if
 	// target_definitions is true in the DecorationsRequest and the target has
 	// a single unambiguous definition.  For each ticket, an Anchor will be
 	// populated in the top-level definition_locations map.
 	TargetDefinition string `protobuf:"bytes,4,opt,name=target_definition,json=targetDefinition,proto3" json:"target_definition,omitempty"`
+	// The reference's span within the source file.  This is also the related
+	// anchor's span to which the source_ticket refers.
+	Span *kythe_proto_common.Span `protobuf:"bytes,5,opt,name=span" json:"span,omitempty"`
 }
 
 func (m *DecorationsReply_Reference) Reset()         { *m = DecorationsReply_Reference{} }
@@ -548,27 +580,45 @@ func (*DecorationsReply_Reference) Descriptor() ([]byte, []int) {
 	return fileDescriptorXref, []int{2, 0}
 }
 
-func (m *DecorationsReply_Reference) GetAnchorStart() *Location_Point {
+func (m *DecorationsReply_Reference) GetTargetTicket() string {
 	if m != nil {
-		return m.AnchorStart
+		return m.TargetTicket
 	}
-	return nil
+	return ""
 }
 
-func (m *DecorationsReply_Reference) GetAnchorEnd() *Location_Point {
+func (m *DecorationsReply_Reference) GetKind() string {
 	if m != nil {
-		return m.AnchorEnd
+		return m.Kind
+	}
+	return ""
+}
+
+func (m *DecorationsReply_Reference) GetTargetDefinition() string {
+	if m != nil {
+		return m.TargetDefinition
+	}
+	return ""
+}
+
+func (m *DecorationsReply_Reference) GetSpan() *kythe_proto_common.Span {
+	if m != nil {
+		return m.Span
 	}
 	return nil
 }
 
 type DecorationsReply_Override struct {
-	// The target object.
-	Ticket string `protobuf:"bytes,1,opt,name=ticket,proto3" json:"ticket,omitempty"`
+	// The target of the override.
+	Target string `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	// Anchor ticket of the override target's definition.  Populated only if
+	// target_definitions is true in the DecorationsRequest and the target has
+	// a single unambiguous definition.  For each ticket, an Anchor will be
+	// populated in the top-level definition_locations map.
+	TargetDefinition string `protobuf:"bytes,5,opt,name=target_definition,json=targetDefinition,proto3" json:"target_definition,omitempty"`
 	// The kind of override.
 	Kind DecorationsReply_Override_Kind `protobuf:"varint,2,opt,name=kind,proto3,enum=kythe.proto.DecorationsReply_Override_Kind" json:"kind,omitempty"`
 	// A display name for the object at ticket.
-	DisplayName  *Printable    `protobuf:"bytes,3,opt,name=display_name,json=displayName" json:"display_name,omitempty"`
 	MarkedSource *MarkedSource `protobuf:"bytes,4,opt,name=marked_source,json=markedSource" json:"marked_source,omitempty"`
 }
 
@@ -577,11 +627,25 @@ func (m *DecorationsReply_Override) String() string            { return proto.Co
 func (*DecorationsReply_Override) ProtoMessage()               {}
 func (*DecorationsReply_Override) Descriptor() ([]byte, []int) { return fileDescriptorXref, []int{2, 1} }
 
-func (m *DecorationsReply_Override) GetDisplayName() *Printable {
+func (m *DecorationsReply_Override) GetTarget() string {
 	if m != nil {
-		return m.DisplayName
+		return m.Target
 	}
-	return nil
+	return ""
+}
+
+func (m *DecorationsReply_Override) GetTargetDefinition() string {
+	if m != nil {
+		return m.TargetDefinition
+	}
+	return ""
+}
+
+func (m *DecorationsReply_Override) GetKind() DecorationsReply_Override_Kind {
+	if m != nil {
+		return m.Kind
+	}
+	return DecorationsReply_Override_OVERRIDES
 }
 
 func (m *DecorationsReply_Override) GetMarkedSource() *MarkedSource {
@@ -625,12 +689,6 @@ type CrossReferencesRequest struct {
 	// the response.  See the documentation for each ReferenceKind for more
 	// information.
 	ReferenceKind CrossReferencesRequest_ReferenceKind `protobuf:"varint,3,opt,name=reference_kind,json=referenceKind,proto3,enum=kythe.proto.CrossReferencesRequest_ReferenceKind" json:"reference_kind,omitempty"`
-	// Determines what kind of documentation anchors, if any, should be returned
-	// in the response.  See the documentation for each DocumentationKind for more
-	// information.
-	// NOTE: this field is deprecated and will be treated as NO_DOCUMENTATION
-	// in the future.
-	DocumentationKind CrossReferencesRequest_DocumentationKind `protobuf:"varint,4,opt,name=documentation_kind,json=documentationKind,proto3,enum=kythe.proto.CrossReferencesRequest_DocumentationKind" json:"documentation_kind,omitempty"`
 	// Determines what kind of callgraph information, if any, should be returned
 	// in the response.  See the documentation for each CallerKind for more
 	// information.
@@ -682,6 +740,83 @@ func (m *CrossReferencesRequest) String() string            { return proto.Compa
 func (*CrossReferencesRequest) ProtoMessage()               {}
 func (*CrossReferencesRequest) Descriptor() ([]byte, []int) { return fileDescriptorXref, []int{3} }
 
+func (m *CrossReferencesRequest) GetTicket() []string {
+	if m != nil {
+		return m.Ticket
+	}
+	return nil
+}
+
+func (m *CrossReferencesRequest) GetDefinitionKind() CrossReferencesRequest_DefinitionKind {
+	if m != nil {
+		return m.DefinitionKind
+	}
+	return CrossReferencesRequest_NO_DEFINITIONS
+}
+
+func (m *CrossReferencesRequest) GetDeclarationKind() CrossReferencesRequest_DeclarationKind {
+	if m != nil {
+		return m.DeclarationKind
+	}
+	return CrossReferencesRequest_NO_DECLARATIONS
+}
+
+func (m *CrossReferencesRequest) GetReferenceKind() CrossReferencesRequest_ReferenceKind {
+	if m != nil {
+		return m.ReferenceKind
+	}
+	return CrossReferencesRequest_NO_REFERENCES
+}
+
+func (m *CrossReferencesRequest) GetCallerKind() CrossReferencesRequest_CallerKind {
+	if m != nil {
+		return m.CallerKind
+	}
+	return CrossReferencesRequest_NO_CALLERS
+}
+
+func (m *CrossReferencesRequest) GetFilter() []string {
+	if m != nil {
+		return m.Filter
+	}
+	return nil
+}
+
+func (m *CrossReferencesRequest) GetAnchorText() bool {
+	if m != nil {
+		return m.AnchorText
+	}
+	return false
+}
+
+func (m *CrossReferencesRequest) GetNodeDefinitions() bool {
+	if m != nil {
+		return m.NodeDefinitions
+	}
+	return false
+}
+
+func (m *CrossReferencesRequest) GetExperimentalSignatures() bool {
+	if m != nil {
+		return m.ExperimentalSignatures
+	}
+	return false
+}
+
+func (m *CrossReferencesRequest) GetPageSize() int32 {
+	if m != nil {
+		return m.PageSize
+	}
+	return 0
+}
+
+func (m *CrossReferencesRequest) GetPageToken() string {
+	if m != nil {
+		return m.PageToken
+	}
+	return ""
+}
+
 type Anchor struct {
 	// Ticket of the anchor node
 	Ticket string `protobuf:"bytes,1,opt,name=ticket,proto3" json:"ticket,omitempty"`
@@ -689,19 +824,15 @@ type Anchor struct {
 	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	// Parent ticket of the anchor; this is the file containing the anchor
 	Parent string `protobuf:"bytes,3,opt,name=parent,proto3" json:"parent,omitempty"`
-	// Starting location of the anchor within its parent's text
-	Start *Location_Point `protobuf:"bytes,4,opt,name=start" json:"start,omitempty"`
-	// Ending location of the anchor within its parent's text
-	End *Location_Point `protobuf:"bytes,5,opt,name=end" json:"end,omitempty"`
+	// Span of the anchor within its parent's text
+	Span *kythe_proto_common.Span `protobuf:"bytes,10,opt,name=span" json:"span,omitempty"`
 	// The anchor's spanning text within the anchor parent's text
 	Text string `protobuf:"bytes,6,opt,name=text,proto3" json:"text,omitempty"`
 	// User-readable snippet of the anchor parent's text at the location of this
 	// anchor
 	Snippet string `protobuf:"bytes,7,opt,name=snippet,proto3" json:"snippet,omitempty"`
-	// Starting location of the anchor's snippet within its parent's text
-	SnippetStart *Location_Point `protobuf:"bytes,8,opt,name=snippet_start,json=snippetStart" json:"snippet_start,omitempty"`
-	// Ending location of the anchor's snippet within its parent's text
-	SnippetEnd *Location_Point `protobuf:"bytes,9,opt,name=snippet_end,json=snippetEnd" json:"snippet_end,omitempty"`
+	// Span of the anchor's snippet within its parent's text
+	SnippetSpan *kythe_proto_common.Span `protobuf:"bytes,11,opt,name=snippet_span,json=snippetSpan" json:"snippet_span,omitempty"`
 }
 
 func (m *Anchor) Reset()                    { *m = Anchor{} }
@@ -709,30 +840,51 @@ func (m *Anchor) String() string            { return proto.CompactTextString(m) 
 func (*Anchor) ProtoMessage()               {}
 func (*Anchor) Descriptor() ([]byte, []int) { return fileDescriptorXref, []int{4} }
 
-func (m *Anchor) GetStart() *Location_Point {
+func (m *Anchor) GetTicket() string {
 	if m != nil {
-		return m.Start
+		return m.Ticket
+	}
+	return ""
+}
+
+func (m *Anchor) GetKind() string {
+	if m != nil {
+		return m.Kind
+	}
+	return ""
+}
+
+func (m *Anchor) GetParent() string {
+	if m != nil {
+		return m.Parent
+	}
+	return ""
+}
+
+func (m *Anchor) GetSpan() *kythe_proto_common.Span {
+	if m != nil {
+		return m.Span
 	}
 	return nil
 }
 
-func (m *Anchor) GetEnd() *Location_Point {
+func (m *Anchor) GetText() string {
 	if m != nil {
-		return m.End
+		return m.Text
 	}
-	return nil
+	return ""
 }
 
-func (m *Anchor) GetSnippetStart() *Location_Point {
+func (m *Anchor) GetSnippet() string {
 	if m != nil {
-		return m.SnippetStart
+		return m.Snippet
 	}
-	return nil
+	return ""
 }
 
-func (m *Anchor) GetSnippetEnd() *Location_Point {
+func (m *Anchor) GetSnippetSpan() *kythe_proto_common.Span {
 	if m != nil {
-		return m.SnippetEnd
+		return m.SnippetSpan
 	}
 	return nil
 }
@@ -749,6 +901,20 @@ func (m *Link) String() string            { return proto.CompactTextString(m) }
 func (*Link) ProtoMessage()               {}
 func (*Link) Descriptor() ([]byte, []int) { return fileDescriptorXref, []int{5} }
 
+func (m *Link) GetKind() Link_Kind {
+	if m != nil {
+		return m.Kind
+	}
+	return Link_DEFINITION
+}
+
+func (m *Link) GetDefinition() []string {
+	if m != nil {
+		return m.Definition
+	}
+	return nil
+}
+
 type Printable struct {
 	// Raw text that can be displayed to the user (but may also contain
 	// markup that can be interpreted, like Doxygen comments). Links are
@@ -764,6 +930,13 @@ func (m *Printable) Reset()                    { *m = Printable{} }
 func (m *Printable) String() string            { return proto.CompactTextString(m) }
 func (*Printable) ProtoMessage()               {}
 func (*Printable) Descriptor() ([]byte, []int) { return fileDescriptorXref, []int{6} }
+
+func (m *Printable) GetRawText() string {
+	if m != nil {
+		return m.RawText
+	}
+	return ""
+}
 
 func (m *Printable) GetLink() []*Link {
 	if m != nil {
@@ -801,11 +974,60 @@ func (m *MarkedSource) String() string            { return proto.CompactTextStri
 func (*MarkedSource) ProtoMessage()               {}
 func (*MarkedSource) Descriptor() ([]byte, []int) { return fileDescriptorXref, []int{7} }
 
+func (m *MarkedSource) GetKind() MarkedSource_Kind {
+	if m != nil {
+		return m.Kind
+	}
+	return MarkedSource_BOX
+}
+
+func (m *MarkedSource) GetPreText() string {
+	if m != nil {
+		return m.PreText
+	}
+	return ""
+}
+
 func (m *MarkedSource) GetChild() []*MarkedSource {
 	if m != nil {
 		return m.Child
 	}
 	return nil
+}
+
+func (m *MarkedSource) GetPostChildText() string {
+	if m != nil {
+		return m.PostChildText
+	}
+	return ""
+}
+
+func (m *MarkedSource) GetPostText() string {
+	if m != nil {
+		return m.PostText
+	}
+	return ""
+}
+
+func (m *MarkedSource) GetLookupIndex() uint32 {
+	if m != nil {
+		return m.LookupIndex
+	}
+	return 0
+}
+
+func (m *MarkedSource) GetDefaultChildrenCount() uint32 {
+	if m != nil {
+		return m.DefaultChildrenCount
+	}
+	return 0
+}
+
+func (m *MarkedSource) GetAddFinalListToken() bool {
+	if m != nil {
+		return m.AddFinalListToken
+	}
+	return false
 }
 
 func (m *MarkedSource) GetLink() []*Link {
@@ -866,6 +1088,13 @@ func (m *CrossReferencesReply) GetDefinitionLocations() map[string]*Anchor {
 	return nil
 }
 
+func (m *CrossReferencesReply) GetNextPageToken() string {
+	if m != nil {
+		return m.NextPageToken
+	}
+	return ""
+}
+
 type CrossReferencesReply_RelatedNode struct {
 	// Ticket of the node
 	Ticket string `protobuf:"bytes,1,opt,name=ticket,proto3" json:"ticket,omitempty"`
@@ -882,11 +1111,31 @@ func (*CrossReferencesReply_RelatedNode) Descriptor() ([]byte, []int) {
 	return fileDescriptorXref, []int{8, 0}
 }
 
+func (m *CrossReferencesReply_RelatedNode) GetTicket() string {
+	if m != nil {
+		return m.Ticket
+	}
+	return ""
+}
+
+func (m *CrossReferencesReply_RelatedNode) GetRelationKind() string {
+	if m != nil {
+		return m.RelationKind
+	}
+	return ""
+}
+
+func (m *CrossReferencesReply_RelatedNode) GetOrdinal() int32 {
+	if m != nil {
+		return m.Ordinal
+	}
+	return 0
+}
+
 type CrossReferencesReply_RelatedAnchor struct {
 	// The anchor covering the related object.
 	Anchor *Anchor `protobuf:"bytes,1,opt,name=anchor" json:"anchor,omitempty"`
 	// A name for the related object.
-	DisplayName  *Printable    `protobuf:"bytes,2,opt,name=display_name,json=displayName" json:"display_name,omitempty"`
 	MarkedSource *MarkedSource `protobuf:"bytes,5,opt,name=marked_source,json=markedSource" json:"marked_source,omitempty"`
 	// Specific locations, usually within the related object, that caused
 	// the relationship to exist. This field is relevant to caller sets.
@@ -909,13 +1158,6 @@ func (m *CrossReferencesReply_RelatedAnchor) GetAnchor() *Anchor {
 	return nil
 }
 
-func (m *CrossReferencesReply_RelatedAnchor) GetDisplayName() *Printable {
-	if m != nil {
-		return m.DisplayName
-	}
-	return nil
-}
-
 func (m *CrossReferencesReply_RelatedAnchor) GetMarkedSource() *MarkedSource {
 	if m != nil {
 		return m.MarkedSource
@@ -930,10 +1172,16 @@ func (m *CrossReferencesReply_RelatedAnchor) GetSite() []*Anchor {
 	return nil
 }
 
+func (m *CrossReferencesReply_RelatedAnchor) GetTicket() string {
+	if m != nil {
+		return m.Ticket
+	}
+	return ""
+}
+
 type CrossReferencesReply_CrossReferenceSet struct {
 	Ticket string `protobuf:"bytes,1,opt,name=ticket,proto3" json:"ticket,omitempty"`
 	// A name for the given node.
-	DisplayName  *Printable    `protobuf:"bytes,7,opt,name=display_name,json=displayName" json:"display_name,omitempty"`
 	MarkedSource *MarkedSource `protobuf:"bytes,8,opt,name=marked_source,json=markedSource" json:"marked_source,omitempty"`
 	// The set of definitions for the given node.
 	Definition []*CrossReferencesReply_RelatedAnchor `protobuf:"bytes,2,rep,name=definition" json:"definition,omitempty"`
@@ -941,8 +1189,6 @@ type CrossReferencesReply_CrossReferenceSet struct {
 	Declaration []*CrossReferencesReply_RelatedAnchor `protobuf:"bytes,5,rep,name=declaration" json:"declaration,omitempty"`
 	// The set of simple references for the given node.
 	Reference []*CrossReferencesReply_RelatedAnchor `protobuf:"bytes,3,rep,name=reference" json:"reference,omitempty"`
-	// The set of documentation for the given node.
-	Documentation []*CrossReferencesReply_RelatedAnchor `protobuf:"bytes,4,rep,name=documentation" json:"documentation,omitempty"`
 	// The set of callers for the given node.
 	Caller []*CrossReferencesReply_RelatedAnchor `protobuf:"bytes,6,rep,name=caller" json:"caller,omitempty"`
 	// The set of related nodes to the given node.
@@ -958,11 +1204,11 @@ func (*CrossReferencesReply_CrossReferenceSet) Descriptor() ([]byte, []int) {
 	return fileDescriptorXref, []int{8, 2}
 }
 
-func (m *CrossReferencesReply_CrossReferenceSet) GetDisplayName() *Printable {
+func (m *CrossReferencesReply_CrossReferenceSet) GetTicket() string {
 	if m != nil {
-		return m.DisplayName
+		return m.Ticket
 	}
-	return nil
+	return ""
 }
 
 func (m *CrossReferencesReply_CrossReferenceSet) GetMarkedSource() *MarkedSource {
@@ -989,13 +1235,6 @@ func (m *CrossReferencesReply_CrossReferenceSet) GetDeclaration() []*CrossRefere
 func (m *CrossReferencesReply_CrossReferenceSet) GetReference() []*CrossReferencesReply_RelatedAnchor {
 	if m != nil {
 		return m.Reference
-	}
-	return nil
-}
-
-func (m *CrossReferencesReply_CrossReferenceSet) GetDocumentation() []*CrossReferencesReply_RelatedAnchor {
-	if m != nil {
-		return m.Documentation
 	}
 	return nil
 }
@@ -1030,6 +1269,41 @@ func (*CrossReferencesReply_Total) Descriptor() ([]byte, []int) {
 	return fileDescriptorXref, []int{8, 3}
 }
 
+func (m *CrossReferencesReply_Total) GetDefinitions() int64 {
+	if m != nil {
+		return m.Definitions
+	}
+	return 0
+}
+
+func (m *CrossReferencesReply_Total) GetDeclarations() int64 {
+	if m != nil {
+		return m.Declarations
+	}
+	return 0
+}
+
+func (m *CrossReferencesReply_Total) GetReferences() int64 {
+	if m != nil {
+		return m.References
+	}
+	return 0
+}
+
+func (m *CrossReferencesReply_Total) GetDocumentation() int64 {
+	if m != nil {
+		return m.Documentation
+	}
+	return 0
+}
+
+func (m *CrossReferencesReply_Total) GetCallers() int64 {
+	if m != nil {
+		return m.Callers
+	}
+	return 0
+}
+
 func (m *CrossReferencesReply_Total) GetRelatedNodesByRelation() map[string]int64 {
 	if m != nil {
 		return m.RelatedNodesByRelation
@@ -1045,6 +1319,9 @@ type DocumentationRequest struct {
 	// returned. The filter applies to ALL documented and linked nodes.
 	// See EdgesRequest (graph.proto) for the format of the filter globs.
 	Filter []string `protobuf:"bytes,2,rep,name=filter" json:"filter,omitempty"`
+	// If set, this DocumentationRequest will return documents for the requested
+	// tickets as well as their immediate semantic descendants.
+	IncludeChildren bool `protobuf:"varint,3,opt,name=include_children,json=includeChildren,proto3" json:"include_children,omitempty"`
 }
 
 func (m *DocumentationRequest) Reset()                    { *m = DocumentationRequest{} }
@@ -1052,12 +1329,33 @@ func (m *DocumentationRequest) String() string            { return proto.Compact
 func (*DocumentationRequest) ProtoMessage()               {}
 func (*DocumentationRequest) Descriptor() ([]byte, []int) { return fileDescriptorXref, []int{9} }
 
+func (m *DocumentationRequest) GetTicket() []string {
+	if m != nil {
+		return m.Ticket
+	}
+	return nil
+}
+
+func (m *DocumentationRequest) GetFilter() []string {
+	if m != nil {
+		return m.Filter
+	}
+	return nil
+}
+
+func (m *DocumentationRequest) GetIncludeChildren() bool {
+	if m != nil {
+		return m.IncludeChildren
+	}
+	return false
+}
+
 type DocumentationReply struct {
 	Document []*DocumentationReply_Document `protobuf:"bytes,1,rep,name=document" json:"document,omitempty"`
 	// The facts left from the requested filters of the documented node facts.
 	Nodes map[string]*kythe_proto_common.NodeInfo `protobuf:"bytes,2,rep,name=nodes" json:"nodes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
-	// Map from the definition tickets referred to in each NodeInfo to their
-	// Anchor.
+	// Map from the definition anchor tickets referred to in each NodeInfo to
+	// their corresponding Anchor data.
 	DefinitionLocations map[string]*Anchor `protobuf:"bytes,3,rep,name=definition_locations,json=definitionLocations" json:"definition_locations,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 }
 
@@ -1100,6 +1398,9 @@ type DocumentationReply_Document struct {
 	Initializer  *Printable    `protobuf:"bytes,5,opt,name=initializer" json:"initializer,omitempty"`
 	DefinedBy    *Printable    `protobuf:"bytes,6,opt,name=defined_by,json=definedBy" json:"defined_by,omitempty"`
 	MarkedSource *MarkedSource `protobuf:"bytes,8,opt,name=marked_source,json=markedSource" json:"marked_source,omitempty"`
+	// The children of this Document. This relationship may be distinct from the
+	// `childof` relationship.
+	Children []*DocumentationReply_Document `protobuf:"bytes,9,rep,name=children" json:"children,omitempty"`
 }
 
 func (m *DocumentationReply_Document) Reset()         { *m = DocumentationReply_Document{} }
@@ -1107,6 +1408,13 @@ func (m *DocumentationReply_Document) String() string { return proto.CompactText
 func (*DocumentationReply_Document) ProtoMessage()    {}
 func (*DocumentationReply_Document) Descriptor() ([]byte, []int) {
 	return fileDescriptorXref, []int{10, 0}
+}
+
+func (m *DocumentationReply_Document) GetTicket() string {
+	if m != nil {
+		return m.Ticket
+	}
+	return ""
 }
 
 func (m *DocumentationReply_Document) GetText() *Printable {
@@ -1151,9 +1459,15 @@ func (m *DocumentationReply_Document) GetMarkedSource() *MarkedSource {
 	return nil
 }
 
+func (m *DocumentationReply_Document) GetChildren() []*DocumentationReply_Document {
+	if m != nil {
+		return m.Children
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*Location)(nil), "kythe.proto.Location")
-	proto.RegisterType((*Location_Point)(nil), "kythe.proto.Location.Point")
 	proto.RegisterType((*DecorationsRequest)(nil), "kythe.proto.DecorationsRequest")
 	proto.RegisterType((*DecorationsReply)(nil), "kythe.proto.DecorationsReply")
 	proto.RegisterType((*DecorationsReply_Reference)(nil), "kythe.proto.DecorationsReply.Reference")
@@ -1178,7 +1492,6 @@ func init() {
 	proto.RegisterEnum("kythe.proto.CrossReferencesRequest_DefinitionKind", CrossReferencesRequest_DefinitionKind_name, CrossReferencesRequest_DefinitionKind_value)
 	proto.RegisterEnum("kythe.proto.CrossReferencesRequest_DeclarationKind", CrossReferencesRequest_DeclarationKind_name, CrossReferencesRequest_DeclarationKind_value)
 	proto.RegisterEnum("kythe.proto.CrossReferencesRequest_ReferenceKind", CrossReferencesRequest_ReferenceKind_name, CrossReferencesRequest_ReferenceKind_value)
-	proto.RegisterEnum("kythe.proto.CrossReferencesRequest_DocumentationKind", CrossReferencesRequest_DocumentationKind_name, CrossReferencesRequest_DocumentationKind_value)
 	proto.RegisterEnum("kythe.proto.CrossReferencesRequest_CallerKind", CrossReferencesRequest_CallerKind_name, CrossReferencesRequest_CallerKind_value)
 	proto.RegisterEnum("kythe.proto.Link_Kind", Link_Kind_name, Link_Kind_value)
 	proto.RegisterEnum("kythe.proto.MarkedSource_Kind", MarkedSource_Kind_name, MarkedSource_Kind_value)
@@ -1190,7 +1503,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion4
 
 // Client API for XRefService service
 
@@ -1334,228 +1647,208 @@ var _XRefService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _XRefService_Documentation_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "kythe/proto/xref.proto",
 }
 
-func (m *Location) Marshal() (data []byte, err error) {
+func (m *Location) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Location) MarshalTo(data []byte) (int, error) {
+func (m *Location) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ticket) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Ticket)))
-		i += copy(data[i:], m.Ticket)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Ticket)))
+		i += copy(dAtA[i:], m.Ticket)
 	}
 	if m.Kind != 0 {
-		data[i] = 0x10
+		dAtA[i] = 0x10
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Kind))
+		i = encodeVarintXref(dAtA, i, uint64(m.Kind))
 	}
-	if m.Start != nil {
-		data[i] = 0x1a
+	if m.Span != nil {
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Start.Size()))
-		n1, err := m.Start.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.Span.Size()))
+		n1, err := m.Span.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n1
 	}
-	if m.End != nil {
-		data[i] = 0x22
+	return i, nil
+}
+
+func (m *DecorationsRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DecorationsRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Location != nil {
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintXref(data, i, uint64(m.End.Size()))
-		n2, err := m.End.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.Location.Size()))
+		n2, err := m.Location.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n2
 	}
-	return i, nil
-}
-
-func (m *Location_Point) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Location_Point) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.ByteOffset != 0 {
-		data[i] = 0x8
-		i++
-		i = encodeVarintXref(data, i, uint64(m.ByteOffset))
-	}
-	if m.LineNumber != 0 {
-		data[i] = 0x10
-		i++
-		i = encodeVarintXref(data, i, uint64(m.LineNumber))
-	}
-	if m.ColumnOffset != 0 {
-		data[i] = 0x18
-		i++
-		i = encodeVarintXref(data, i, uint64(m.ColumnOffset))
-	}
-	return i, nil
-}
-
-func (m *DecorationsRequest) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *DecorationsRequest) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Location != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintXref(data, i, uint64(m.Location.Size()))
-		n3, err := m.Location.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
-	}
 	if len(m.DirtyBuffer) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.DirtyBuffer)))
-		i += copy(data[i:], m.DirtyBuffer)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.DirtyBuffer)))
+		i += copy(dAtA[i:], m.DirtyBuffer)
 	}
 	if m.SourceText {
-		data[i] = 0x18
+		dAtA[i] = 0x18
 		i++
 		if m.SourceText {
-			data[i] = 1
+			dAtA[i] = 1
 		} else {
-			data[i] = 0
+			dAtA[i] = 0
 		}
 		i++
 	}
 	if m.References {
-		data[i] = 0x20
+		dAtA[i] = 0x20
 		i++
 		if m.References {
-			data[i] = 1
+			dAtA[i] = 1
 		} else {
-			data[i] = 0
+			dAtA[i] = 0
 		}
 		i++
 	}
 	if len(m.Filter) > 0 {
 		for _, s := range m.Filter {
-			data[i] = 0x2a
+			dAtA[i] = 0x2a
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	if m.TargetDefinitions {
-		data[i] = 0x30
+		dAtA[i] = 0x30
 		i++
 		if m.TargetDefinitions {
-			data[i] = 1
+			dAtA[i] = 1
 		} else {
-			data[i] = 0
+			dAtA[i] = 0
 		}
 		i++
 	}
 	if m.ExtendsOverrides {
-		data[i] = 0x38
+		dAtA[i] = 0x38
 		i++
 		if m.ExtendsOverrides {
-			data[i] = 1
+			dAtA[i] = 1
 		} else {
-			data[i] = 0
+			dAtA[i] = 0
+		}
+		i++
+	}
+	if m.Diagnostics {
+		dAtA[i] = 0x40
+		i++
+		if m.Diagnostics {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
 		}
 		i++
 	}
 	if m.SpanKind != 0 {
-		data[i] = 0x50
+		dAtA[i] = 0x50
 		i++
-		i = encodeVarintXref(data, i, uint64(m.SpanKind))
+		i = encodeVarintXref(dAtA, i, uint64(m.SpanKind))
 	}
 	return i, nil
 }
 
-func (m *DecorationsReply) Marshal() (data []byte, err error) {
+func (m *DecorationsReply) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DecorationsReply) MarshalTo(data []byte) (int, error) {
+func (m *DecorationsReply) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Location != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Location.Size()))
-		n4, err := m.Location.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.Location.Size()))
+		n3, err := m.Location.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n4
+		i += n3
 	}
 	if len(m.SourceText) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.SourceText)))
-		i += copy(data[i:], m.SourceText)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.SourceText)))
+		i += copy(dAtA[i:], m.SourceText)
 	}
 	if len(m.Encoding) > 0 {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Encoding)))
-		i += copy(data[i:], m.Encoding)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Encoding)))
+		i += copy(dAtA[i:], m.Encoding)
 	}
 	if len(m.Reference) > 0 {
 		for _, msg := range m.Reference {
-			data[i] = 0x22
+			dAtA[i] = 0x22
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Diagnostic) > 0 {
+		for _, msg := range m.Diagnostic {
+			dAtA[i] = 0x2a
+			i++
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1564,218 +1857,207 @@ func (m *DecorationsReply) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.Nodes) > 0 {
 		for k, _ := range m.Nodes {
-			data[i] = 0x7a
+			dAtA[i] = 0x7a
 			i++
 			v := m.Nodes[k]
-			if v == nil {
-				return 0, errors.New("proto: map has nil element")
+			msgSize := 0
+			if v != nil {
+				msgSize = v.Size()
+				msgSize += 1 + sovXref(uint64(msgSize))
 			}
-			msgSize := v.Size()
-			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + msgSize + sovXref(uint64(msgSize))
-			i = encodeVarintXref(data, i, uint64(mapSize))
-			data[i] = 0xa
+			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + msgSize
+			i = encodeVarintXref(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintXref(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x12
-			i++
-			i = encodeVarintXref(data, i, uint64(v.Size()))
-			n5, err := v.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
+			i = encodeVarintXref(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			if v != nil {
+				dAtA[i] = 0x12
+				i++
+				i = encodeVarintXref(dAtA, i, uint64(v.Size()))
+				n4, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
+				}
+				i += n4
 			}
-			i += n5
 		}
 	}
 	if len(m.DefinitionLocations) > 0 {
 		for k, _ := range m.DefinitionLocations {
-			data[i] = 0x82
+			dAtA[i] = 0x82
 			i++
-			data[i] = 0x1
+			dAtA[i] = 0x1
 			i++
 			v := m.DefinitionLocations[k]
-			if v == nil {
-				return 0, errors.New("proto: map has nil element")
+			msgSize := 0
+			if v != nil {
+				msgSize = v.Size()
+				msgSize += 1 + sovXref(uint64(msgSize))
 			}
-			msgSize := v.Size()
-			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + msgSize + sovXref(uint64(msgSize))
-			i = encodeVarintXref(data, i, uint64(mapSize))
-			data[i] = 0xa
+			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + msgSize
+			i = encodeVarintXref(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintXref(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x12
-			i++
-			i = encodeVarintXref(data, i, uint64(v.Size()))
-			n6, err := v.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
+			i = encodeVarintXref(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			if v != nil {
+				dAtA[i] = 0x12
+				i++
+				i = encodeVarintXref(dAtA, i, uint64(v.Size()))
+				n5, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
+				}
+				i += n5
 			}
-			i += n6
 		}
 	}
 	if len(m.ExtendsOverrides) > 0 {
 		for k, _ := range m.ExtendsOverrides {
-			data[i] = 0x8a
+			dAtA[i] = 0x8a
 			i++
-			data[i] = 0x1
+			dAtA[i] = 0x1
 			i++
 			v := m.ExtendsOverrides[k]
-			if v == nil {
-				return 0, errors.New("proto: map has nil element")
+			msgSize := 0
+			if v != nil {
+				msgSize = v.Size()
+				msgSize += 1 + sovXref(uint64(msgSize))
 			}
-			msgSize := v.Size()
-			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + msgSize + sovXref(uint64(msgSize))
-			i = encodeVarintXref(data, i, uint64(mapSize))
-			data[i] = 0xa
+			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + msgSize
+			i = encodeVarintXref(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintXref(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x12
-			i++
-			i = encodeVarintXref(data, i, uint64(v.Size()))
-			n7, err := v.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
+			i = encodeVarintXref(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			if v != nil {
+				dAtA[i] = 0x12
+				i++
+				i = encodeVarintXref(dAtA, i, uint64(v.Size()))
+				n6, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
+				}
+				i += n6
 			}
-			i += n7
 		}
 	}
 	return i, nil
 }
 
-func (m *DecorationsReply_Reference) Marshal() (data []byte, err error) {
+func (m *DecorationsReply_Reference) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DecorationsReply_Reference) MarshalTo(data []byte) (int, error) {
+func (m *DecorationsReply_Reference) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	if len(m.SourceTicket) > 0 {
-		data[i] = 0xa
-		i++
-		i = encodeVarintXref(data, i, uint64(len(m.SourceTicket)))
-		i += copy(data[i:], m.SourceTicket)
-	}
 	if len(m.TargetTicket) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.TargetTicket)))
-		i += copy(data[i:], m.TargetTicket)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.TargetTicket)))
+		i += copy(dAtA[i:], m.TargetTicket)
 	}
 	if len(m.Kind) > 0 {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Kind)))
-		i += copy(data[i:], m.Kind)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Kind)))
+		i += copy(dAtA[i:], m.Kind)
 	}
 	if len(m.TargetDefinition) > 0 {
-		data[i] = 0x22
+		dAtA[i] = 0x22
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.TargetDefinition)))
-		i += copy(data[i:], m.TargetDefinition)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.TargetDefinition)))
+		i += copy(dAtA[i:], m.TargetDefinition)
 	}
-	if m.AnchorStart != nil {
-		data[i] = 0x52
+	if m.Span != nil {
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintXref(data, i, uint64(m.AnchorStart.Size()))
-		n8, err := m.AnchorStart.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.Span.Size()))
+		n7, err := m.Span.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n7
+	}
+	return i, nil
+}
+
+func (m *DecorationsReply_Override) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DecorationsReply_Override) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Target) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Target)))
+		i += copy(dAtA[i:], m.Target)
+	}
+	if m.Kind != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintXref(dAtA, i, uint64(m.Kind))
+	}
+	if m.MarkedSource != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintXref(dAtA, i, uint64(m.MarkedSource.Size()))
+		n8, err := m.MarkedSource.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n8
 	}
-	if m.AnchorEnd != nil {
-		data[i] = 0x5a
+	if len(m.TargetDefinition) > 0 {
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintXref(data, i, uint64(m.AnchorEnd.Size()))
-		n9, err := m.AnchorEnd.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n9
+		i = encodeVarintXref(dAtA, i, uint64(len(m.TargetDefinition)))
+		i += copy(dAtA[i:], m.TargetDefinition)
 	}
 	return i, nil
 }
 
-func (m *DecorationsReply_Override) Marshal() (data []byte, err error) {
+func (m *DecorationsReply_Overrides) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DecorationsReply_Override) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Ticket) > 0 {
-		data[i] = 0xa
-		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Ticket)))
-		i += copy(data[i:], m.Ticket)
-	}
-	if m.Kind != 0 {
-		data[i] = 0x10
-		i++
-		i = encodeVarintXref(data, i, uint64(m.Kind))
-	}
-	if m.DisplayName != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintXref(data, i, uint64(m.DisplayName.Size()))
-		n10, err := m.DisplayName.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n10
-	}
-	if m.MarkedSource != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintXref(data, i, uint64(m.MarkedSource.Size()))
-		n11, err := m.MarkedSource.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n11
-	}
-	return i, nil
-}
-
-func (m *DecorationsReply_Overrides) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *DecorationsReply_Overrides) MarshalTo(data []byte) (int, error) {
+func (m *DecorationsReply_Overrides) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Override) > 0 {
 		for _, msg := range m.Override {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1785,275 +2067,250 @@ func (m *DecorationsReply_Overrides) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *CrossReferencesRequest) Marshal() (data []byte, err error) {
+func (m *CrossReferencesRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *CrossReferencesRequest) MarshalTo(data []byte) (int, error) {
+func (m *CrossReferencesRequest) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ticket) > 0 {
 		for _, s := range m.Ticket {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	if m.DefinitionKind != 0 {
-		data[i] = 0x10
+		dAtA[i] = 0x10
 		i++
-		i = encodeVarintXref(data, i, uint64(m.DefinitionKind))
+		i = encodeVarintXref(dAtA, i, uint64(m.DefinitionKind))
 	}
 	if m.ReferenceKind != 0 {
-		data[i] = 0x18
+		dAtA[i] = 0x18
 		i++
-		i = encodeVarintXref(data, i, uint64(m.ReferenceKind))
-	}
-	if m.DocumentationKind != 0 {
-		data[i] = 0x20
-		i++
-		i = encodeVarintXref(data, i, uint64(m.DocumentationKind))
+		i = encodeVarintXref(dAtA, i, uint64(m.ReferenceKind))
 	}
 	if len(m.Filter) > 0 {
 		for _, s := range m.Filter {
-			data[i] = 0x2a
+			dAtA[i] = 0x2a
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	if m.AnchorText {
-		data[i] = 0x30
+		dAtA[i] = 0x30
 		i++
 		if m.AnchorText {
-			data[i] = 1
+			dAtA[i] = 1
 		} else {
-			data[i] = 0
+			dAtA[i] = 0
 		}
 		i++
 	}
 	if m.DeclarationKind != 0 {
-		data[i] = 0x38
+		dAtA[i] = 0x38
 		i++
-		i = encodeVarintXref(data, i, uint64(m.DeclarationKind))
+		i = encodeVarintXref(dAtA, i, uint64(m.DeclarationKind))
 	}
 	if m.NodeDefinitions {
-		data[i] = 0x40
+		dAtA[i] = 0x40
 		i++
 		if m.NodeDefinitions {
-			data[i] = 1
+			dAtA[i] = 1
 		} else {
-			data[i] = 0
+			dAtA[i] = 0
 		}
 		i++
 	}
 	if m.PageSize != 0 {
-		data[i] = 0x50
+		dAtA[i] = 0x50
 		i++
-		i = encodeVarintXref(data, i, uint64(m.PageSize))
+		i = encodeVarintXref(dAtA, i, uint64(m.PageSize))
 	}
 	if len(m.PageToken) > 0 {
-		data[i] = 0x5a
+		dAtA[i] = 0x5a
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.PageToken)))
-		i += copy(data[i:], m.PageToken)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.PageToken)))
+		i += copy(dAtA[i:], m.PageToken)
 	}
 	if m.CallerKind != 0 {
-		data[i] = 0x60
+		dAtA[i] = 0x60
 		i++
-		i = encodeVarintXref(data, i, uint64(m.CallerKind))
+		i = encodeVarintXref(dAtA, i, uint64(m.CallerKind))
 	}
 	if m.ExperimentalSignatures {
-		data[i] = 0xa0
+		dAtA[i] = 0xa0
 		i++
-		data[i] = 0x6
+		dAtA[i] = 0x6
 		i++
 		if m.ExperimentalSignatures {
-			data[i] = 1
+			dAtA[i] = 1
 		} else {
-			data[i] = 0
+			dAtA[i] = 0
 		}
 		i++
 	}
 	return i, nil
 }
 
-func (m *Anchor) Marshal() (data []byte, err error) {
+func (m *Anchor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Anchor) MarshalTo(data []byte) (int, error) {
+func (m *Anchor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ticket) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Ticket)))
-		i += copy(data[i:], m.Ticket)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Ticket)))
+		i += copy(dAtA[i:], m.Ticket)
 	}
 	if len(m.Kind) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Kind)))
-		i += copy(data[i:], m.Kind)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Kind)))
+		i += copy(dAtA[i:], m.Kind)
 	}
 	if len(m.Parent) > 0 {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Parent)))
-		i += copy(data[i:], m.Parent)
-	}
-	if m.Start != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintXref(data, i, uint64(m.Start.Size()))
-		n12, err := m.Start.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n12
-	}
-	if m.End != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintXref(data, i, uint64(m.End.Size()))
-		n13, err := m.End.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n13
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Parent)))
+		i += copy(dAtA[i:], m.Parent)
 	}
 	if len(m.Text) > 0 {
-		data[i] = 0x32
+		dAtA[i] = 0x32
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Text)))
-		i += copy(data[i:], m.Text)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Text)))
+		i += copy(dAtA[i:], m.Text)
 	}
 	if len(m.Snippet) > 0 {
-		data[i] = 0x3a
+		dAtA[i] = 0x3a
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Snippet)))
-		i += copy(data[i:], m.Snippet)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Snippet)))
+		i += copy(dAtA[i:], m.Snippet)
 	}
-	if m.SnippetStart != nil {
-		data[i] = 0x42
+	if m.Span != nil {
+		dAtA[i] = 0x52
 		i++
-		i = encodeVarintXref(data, i, uint64(m.SnippetStart.Size()))
-		n14, err := m.SnippetStart.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.Span.Size()))
+		n9, err := m.Span.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n14
+		i += n9
 	}
-	if m.SnippetEnd != nil {
-		data[i] = 0x4a
+	if m.SnippetSpan != nil {
+		dAtA[i] = 0x5a
 		i++
-		i = encodeVarintXref(data, i, uint64(m.SnippetEnd.Size()))
-		n15, err := m.SnippetEnd.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.SnippetSpan.Size()))
+		n10, err := m.SnippetSpan.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n15
+		i += n10
 	}
 	return i, nil
 }
 
-func (m *Link) Marshal() (data []byte, err error) {
+func (m *Link) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Link) MarshalTo(data []byte) (int, error) {
+func (m *Link) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Kind != 0 {
-		data[i] = 0x10
+		dAtA[i] = 0x10
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Kind))
+		i = encodeVarintXref(dAtA, i, uint64(m.Kind))
 	}
 	if len(m.Definition) > 0 {
 		for _, s := range m.Definition {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	return i, nil
 }
 
-func (m *Printable) Marshal() (data []byte, err error) {
+func (m *Printable) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Printable) MarshalTo(data []byte) (int, error) {
+func (m *Printable) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.RawText) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.RawText)))
-		i += copy(data[i:], m.RawText)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.RawText)))
+		i += copy(dAtA[i:], m.RawText)
 	}
 	if len(m.Link) > 0 {
 		for _, msg := range m.Link {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -2063,38 +2320,38 @@ func (m *Printable) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *MarkedSource) Marshal() (data []byte, err error) {
+func (m *MarkedSource) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *MarkedSource) MarshalTo(data []byte) (int, error) {
+func (m *MarkedSource) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Kind != 0 {
-		data[i] = 0x8
+		dAtA[i] = 0x8
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Kind))
+		i = encodeVarintXref(dAtA, i, uint64(m.Kind))
 	}
 	if len(m.PreText) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.PreText)))
-		i += copy(data[i:], m.PreText)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.PreText)))
+		i += copy(dAtA[i:], m.PreText)
 	}
 	if len(m.Child) > 0 {
 		for _, msg := range m.Child {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -2102,43 +2359,43 @@ func (m *MarkedSource) MarshalTo(data []byte) (int, error) {
 		}
 	}
 	if len(m.PostChildText) > 0 {
-		data[i] = 0x22
+		dAtA[i] = 0x22
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.PostChildText)))
-		i += copy(data[i:], m.PostChildText)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.PostChildText)))
+		i += copy(dAtA[i:], m.PostChildText)
 	}
 	if len(m.PostText) > 0 {
-		data[i] = 0x2a
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.PostText)))
-		i += copy(data[i:], m.PostText)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.PostText)))
+		i += copy(dAtA[i:], m.PostText)
 	}
 	if m.LookupIndex != 0 {
-		data[i] = 0x30
+		dAtA[i] = 0x30
 		i++
-		i = encodeVarintXref(data, i, uint64(m.LookupIndex))
+		i = encodeVarintXref(dAtA, i, uint64(m.LookupIndex))
 	}
 	if m.DefaultChildrenCount != 0 {
-		data[i] = 0x38
+		dAtA[i] = 0x38
 		i++
-		i = encodeVarintXref(data, i, uint64(m.DefaultChildrenCount))
+		i = encodeVarintXref(dAtA, i, uint64(m.DefaultChildrenCount))
 	}
 	if m.AddFinalListToken {
-		data[i] = 0x50
+		dAtA[i] = 0x50
 		i++
 		if m.AddFinalListToken {
-			data[i] = 1
+			dAtA[i] = 1
 		} else {
-			data[i] = 0
+			dAtA[i] = 0
 		}
 		i++
 	}
 	if len(m.Link) > 0 {
 		for _, msg := range m.Link {
-			data[i] = 0x5a
+			dAtA[i] = 0x5a
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -2148,191 +2405,190 @@ func (m *MarkedSource) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *CrossReferencesReply) Marshal() (data []byte, err error) {
+func (m *CrossReferencesReply) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *CrossReferencesReply) MarshalTo(data []byte) (int, error) {
+func (m *CrossReferencesReply) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.CrossReferences) > 0 {
 		for k, _ := range m.CrossReferences {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
 			v := m.CrossReferences[k]
-			if v == nil {
-				return 0, errors.New("proto: map has nil element")
+			msgSize := 0
+			if v != nil {
+				msgSize = v.Size()
+				msgSize += 1 + sovXref(uint64(msgSize))
 			}
-			msgSize := v.Size()
-			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + msgSize + sovXref(uint64(msgSize))
-			i = encodeVarintXref(data, i, uint64(mapSize))
-			data[i] = 0xa
+			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + msgSize
+			i = encodeVarintXref(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintXref(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x12
-			i++
-			i = encodeVarintXref(data, i, uint64(v.Size()))
-			n16, err := v.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
+			i = encodeVarintXref(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			if v != nil {
+				dAtA[i] = 0x12
+				i++
+				i = encodeVarintXref(dAtA, i, uint64(v.Size()))
+				n11, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
+				}
+				i += n11
 			}
-			i += n16
 		}
 	}
 	if len(m.Nodes) > 0 {
 		for k, _ := range m.Nodes {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
 			v := m.Nodes[k]
-			if v == nil {
-				return 0, errors.New("proto: map has nil element")
+			msgSize := 0
+			if v != nil {
+				msgSize = v.Size()
+				msgSize += 1 + sovXref(uint64(msgSize))
 			}
-			msgSize := v.Size()
-			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + msgSize + sovXref(uint64(msgSize))
-			i = encodeVarintXref(data, i, uint64(mapSize))
-			data[i] = 0xa
+			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + msgSize
+			i = encodeVarintXref(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintXref(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x12
-			i++
-			i = encodeVarintXref(data, i, uint64(v.Size()))
-			n17, err := v.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
+			i = encodeVarintXref(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			if v != nil {
+				dAtA[i] = 0x12
+				i++
+				i = encodeVarintXref(dAtA, i, uint64(v.Size()))
+				n12, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
+				}
+				i += n12
 			}
-			i += n17
 		}
 	}
 	if len(m.DefinitionLocations) > 0 {
 		for k, _ := range m.DefinitionLocations {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
 			v := m.DefinitionLocations[k]
-			if v == nil {
-				return 0, errors.New("proto: map has nil element")
+			msgSize := 0
+			if v != nil {
+				msgSize = v.Size()
+				msgSize += 1 + sovXref(uint64(msgSize))
 			}
-			msgSize := v.Size()
-			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + msgSize + sovXref(uint64(msgSize))
-			i = encodeVarintXref(data, i, uint64(mapSize))
-			data[i] = 0xa
+			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + msgSize
+			i = encodeVarintXref(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintXref(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x12
-			i++
-			i = encodeVarintXref(data, i, uint64(v.Size()))
-			n18, err := v.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
+			i = encodeVarintXref(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			if v != nil {
+				dAtA[i] = 0x12
+				i++
+				i = encodeVarintXref(dAtA, i, uint64(v.Size()))
+				n13, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
+				}
+				i += n13
 			}
-			i += n18
 		}
 	}
 	if m.Total != nil {
-		data[i] = 0x2a
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Total.Size()))
-		n19, err := m.Total.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.Total.Size()))
+		n14, err := m.Total.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n19
+		i += n14
 	}
 	if len(m.NextPageToken) > 0 {
-		data[i] = 0x52
+		dAtA[i] = 0x52
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.NextPageToken)))
-		i += copy(data[i:], m.NextPageToken)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.NextPageToken)))
+		i += copy(dAtA[i:], m.NextPageToken)
 	}
 	return i, nil
 }
 
-func (m *CrossReferencesReply_RelatedNode) Marshal() (data []byte, err error) {
+func (m *CrossReferencesReply_RelatedNode) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *CrossReferencesReply_RelatedNode) MarshalTo(data []byte) (int, error) {
+func (m *CrossReferencesReply_RelatedNode) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ticket) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Ticket)))
-		i += copy(data[i:], m.Ticket)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Ticket)))
+		i += copy(dAtA[i:], m.Ticket)
 	}
 	if len(m.RelationKind) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.RelationKind)))
-		i += copy(data[i:], m.RelationKind)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.RelationKind)))
+		i += copy(dAtA[i:], m.RelationKind)
 	}
 	if m.Ordinal != 0 {
-		data[i] = 0x18
+		dAtA[i] = 0x18
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Ordinal))
+		i = encodeVarintXref(dAtA, i, uint64(m.Ordinal))
 	}
 	return i, nil
 }
 
-func (m *CrossReferencesReply_RelatedAnchor) Marshal() (data []byte, err error) {
+func (m *CrossReferencesReply_RelatedAnchor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *CrossReferencesReply_RelatedAnchor) MarshalTo(data []byte) (int, error) {
+func (m *CrossReferencesReply_RelatedAnchor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Anchor != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Anchor.Size()))
-		n20, err := m.Anchor.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.Anchor.Size()))
+		n15, err := m.Anchor.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n20
-	}
-	if m.DisplayName != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintXref(data, i, uint64(m.DisplayName.Size()))
-		n21, err := m.DisplayName.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n21
+		i += n15
 	}
 	if len(m.Site) > 0 {
 		for _, msg := range m.Site {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -2340,51 +2596,51 @@ func (m *CrossReferencesReply_RelatedAnchor) MarshalTo(data []byte) (int, error)
 		}
 	}
 	if len(m.Ticket) > 0 {
-		data[i] = 0x22
+		dAtA[i] = 0x22
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Ticket)))
-		i += copy(data[i:], m.Ticket)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Ticket)))
+		i += copy(dAtA[i:], m.Ticket)
 	}
 	if m.MarkedSource != nil {
-		data[i] = 0x2a
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintXref(data, i, uint64(m.MarkedSource.Size()))
-		n22, err := m.MarkedSource.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.MarkedSource.Size()))
+		n16, err := m.MarkedSource.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n22
+		i += n16
 	}
 	return i, nil
 }
 
-func (m *CrossReferencesReply_CrossReferenceSet) Marshal() (data []byte, err error) {
+func (m *CrossReferencesReply_CrossReferenceSet) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *CrossReferencesReply_CrossReferenceSet) MarshalTo(data []byte) (int, error) {
+func (m *CrossReferencesReply_CrossReferenceSet) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ticket) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Ticket)))
-		i += copy(data[i:], m.Ticket)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Ticket)))
+		i += copy(dAtA[i:], m.Ticket)
 	}
 	if len(m.Definition) > 0 {
 		for _, msg := range m.Definition {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -2393,22 +2649,10 @@ func (m *CrossReferencesReply_CrossReferenceSet) MarshalTo(data []byte) (int, er
 	}
 	if len(m.Reference) > 0 {
 		for _, msg := range m.Reference {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	if len(m.Documentation) > 0 {
-		for _, msg := range m.Documentation {
-			data[i] = 0x22
-			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -2417,10 +2661,10 @@ func (m *CrossReferencesReply_CrossReferenceSet) MarshalTo(data []byte) (int, er
 	}
 	if len(m.Declaration) > 0 {
 		for _, msg := range m.Declaration {
-			data[i] = 0x2a
+			dAtA[i] = 0x2a
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -2429,42 +2673,32 @@ func (m *CrossReferencesReply_CrossReferenceSet) MarshalTo(data []byte) (int, er
 	}
 	if len(m.Caller) > 0 {
 		for _, msg := range m.Caller {
-			data[i] = 0x32
+			dAtA[i] = 0x32
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
 			i += n
 		}
 	}
-	if m.DisplayName != nil {
-		data[i] = 0x3a
-		i++
-		i = encodeVarintXref(data, i, uint64(m.DisplayName.Size()))
-		n23, err := m.DisplayName.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n23
-	}
 	if m.MarkedSource != nil {
-		data[i] = 0x42
+		dAtA[i] = 0x42
 		i++
-		i = encodeVarintXref(data, i, uint64(m.MarkedSource.Size()))
-		n24, err := m.MarkedSource.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.MarkedSource.Size()))
+		n17, err := m.MarkedSource.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n24
+		i += n17
 	}
 	if len(m.RelatedNode) > 0 {
 		for _, msg := range m.RelatedNode {
-			data[i] = 0x52
+			dAtA[i] = 0x52
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -2474,134 +2708,144 @@ func (m *CrossReferencesReply_CrossReferenceSet) MarshalTo(data []byte) (int, er
 	return i, nil
 }
 
-func (m *CrossReferencesReply_Total) Marshal() (data []byte, err error) {
+func (m *CrossReferencesReply_Total) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *CrossReferencesReply_Total) MarshalTo(data []byte) (int, error) {
+func (m *CrossReferencesReply_Total) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Definitions != 0 {
-		data[i] = 0x8
+		dAtA[i] = 0x8
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Definitions))
+		i = encodeVarintXref(dAtA, i, uint64(m.Definitions))
 	}
 	if m.Declarations != 0 {
-		data[i] = 0x10
+		dAtA[i] = 0x10
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Declarations))
+		i = encodeVarintXref(dAtA, i, uint64(m.Declarations))
 	}
 	if m.References != 0 {
-		data[i] = 0x18
+		dAtA[i] = 0x18
 		i++
-		i = encodeVarintXref(data, i, uint64(m.References))
+		i = encodeVarintXref(dAtA, i, uint64(m.References))
 	}
 	if m.Documentation != 0 {
-		data[i] = 0x20
+		dAtA[i] = 0x20
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Documentation))
+		i = encodeVarintXref(dAtA, i, uint64(m.Documentation))
 	}
 	if m.Callers != 0 {
-		data[i] = 0x28
+		dAtA[i] = 0x28
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Callers))
+		i = encodeVarintXref(dAtA, i, uint64(m.Callers))
 	}
 	if len(m.RelatedNodesByRelation) > 0 {
 		for k, _ := range m.RelatedNodesByRelation {
-			data[i] = 0x32
+			dAtA[i] = 0x32
 			i++
 			v := m.RelatedNodesByRelation[k]
 			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + sovXref(uint64(v))
-			i = encodeVarintXref(data, i, uint64(mapSize))
-			data[i] = 0xa
+			i = encodeVarintXref(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintXref(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x10
+			i = encodeVarintXref(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			dAtA[i] = 0x10
 			i++
-			i = encodeVarintXref(data, i, uint64(v))
+			i = encodeVarintXref(dAtA, i, uint64(v))
 		}
 	}
 	return i, nil
 }
 
-func (m *DocumentationRequest) Marshal() (data []byte, err error) {
+func (m *DocumentationRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DocumentationRequest) MarshalTo(data []byte) (int, error) {
+func (m *DocumentationRequest) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ticket) > 0 {
 		for _, s := range m.Ticket {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	if len(m.Filter) > 0 {
 		for _, s := range m.Filter {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
+	}
+	if m.IncludeChildren {
+		dAtA[i] = 0x18
+		i++
+		if m.IncludeChildren {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
 	}
 	return i, nil
 }
 
-func (m *DocumentationReply) Marshal() (data []byte, err error) {
+func (m *DocumentationReply) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DocumentationReply) MarshalTo(data []byte) (int, error) {
+func (m *DocumentationReply) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Document) > 0 {
 		for _, msg := range m.Document {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintXref(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -2610,166 +2854,184 @@ func (m *DocumentationReply) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.Nodes) > 0 {
 		for k, _ := range m.Nodes {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
 			v := m.Nodes[k]
-			if v == nil {
-				return 0, errors.New("proto: map has nil element")
+			msgSize := 0
+			if v != nil {
+				msgSize = v.Size()
+				msgSize += 1 + sovXref(uint64(msgSize))
 			}
-			msgSize := v.Size()
-			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + msgSize + sovXref(uint64(msgSize))
-			i = encodeVarintXref(data, i, uint64(mapSize))
-			data[i] = 0xa
+			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + msgSize
+			i = encodeVarintXref(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintXref(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x12
-			i++
-			i = encodeVarintXref(data, i, uint64(v.Size()))
-			n25, err := v.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
+			i = encodeVarintXref(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			if v != nil {
+				dAtA[i] = 0x12
+				i++
+				i = encodeVarintXref(dAtA, i, uint64(v.Size()))
+				n18, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
+				}
+				i += n18
 			}
-			i += n25
 		}
 	}
 	if len(m.DefinitionLocations) > 0 {
 		for k, _ := range m.DefinitionLocations {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
 			v := m.DefinitionLocations[k]
-			if v == nil {
-				return 0, errors.New("proto: map has nil element")
+			msgSize := 0
+			if v != nil {
+				msgSize = v.Size()
+				msgSize += 1 + sovXref(uint64(msgSize))
 			}
-			msgSize := v.Size()
-			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + msgSize + sovXref(uint64(msgSize))
-			i = encodeVarintXref(data, i, uint64(mapSize))
-			data[i] = 0xa
+			mapSize := 1 + len(k) + sovXref(uint64(len(k))) + msgSize
+			i = encodeVarintXref(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintXref(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x12
-			i++
-			i = encodeVarintXref(data, i, uint64(v.Size()))
-			n26, err := v.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
+			i = encodeVarintXref(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			if v != nil {
+				dAtA[i] = 0x12
+				i++
+				i = encodeVarintXref(dAtA, i, uint64(v.Size()))
+				n19, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
+				}
+				i += n19
 			}
-			i += n26
 		}
 	}
 	return i, nil
 }
 
-func (m *DocumentationReply_Document) Marshal() (data []byte, err error) {
+func (m *DocumentationReply_Document) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DocumentationReply_Document) MarshalTo(data []byte) (int, error) {
+func (m *DocumentationReply_Document) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ticket) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintXref(data, i, uint64(len(m.Ticket)))
-		i += copy(data[i:], m.Ticket)
+		i = encodeVarintXref(dAtA, i, uint64(len(m.Ticket)))
+		i += copy(dAtA[i:], m.Ticket)
 	}
 	if m.Text != nil {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Text.Size()))
-		n27, err := m.Text.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.Text.Size()))
+		n20, err := m.Text.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n27
+		i += n20
 	}
 	if m.Signature != nil {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Signature.Size()))
-		n28, err := m.Signature.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.Signature.Size()))
+		n21, err := m.Signature.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n28
+		i += n21
 	}
 	if m.Type != nil {
-		data[i] = 0x22
+		dAtA[i] = 0x22
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Type.Size()))
-		n29, err := m.Type.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.Type.Size()))
+		n22, err := m.Type.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n29
+		i += n22
 	}
 	if m.Initializer != nil {
-		data[i] = 0x2a
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintXref(data, i, uint64(m.Initializer.Size()))
-		n30, err := m.Initializer.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.Initializer.Size()))
+		n23, err := m.Initializer.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n30
+		i += n23
 	}
 	if m.DefinedBy != nil {
-		data[i] = 0x32
+		dAtA[i] = 0x32
 		i++
-		i = encodeVarintXref(data, i, uint64(m.DefinedBy.Size()))
-		n31, err := m.DefinedBy.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.DefinedBy.Size()))
+		n24, err := m.DefinedBy.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n31
+		i += n24
 	}
 	if m.MarkedSource != nil {
-		data[i] = 0x42
+		dAtA[i] = 0x42
 		i++
-		i = encodeVarintXref(data, i, uint64(m.MarkedSource.Size()))
-		n32, err := m.MarkedSource.MarshalTo(data[i:])
+		i = encodeVarintXref(dAtA, i, uint64(m.MarkedSource.Size()))
+		n25, err := m.MarkedSource.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n32
+		i += n25
+	}
+	if len(m.Children) > 0 {
+		for _, msg := range m.Children {
+			dAtA[i] = 0x4a
+			i++
+			i = encodeVarintXref(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
 	return i, nil
 }
 
-func encodeFixed64Xref(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64Xref(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Xref(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Xref(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintXref(data []byte, offset int, v uint64) int {
+func encodeVarintXref(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *Location) Size() (n int) {
@@ -2782,28 +3044,9 @@ func (m *Location) Size() (n int) {
 	if m.Kind != 0 {
 		n += 1 + sovXref(uint64(m.Kind))
 	}
-	if m.Start != nil {
-		l = m.Start.Size()
+	if m.Span != nil {
+		l = m.Span.Size()
 		n += 1 + l + sovXref(uint64(l))
-	}
-	if m.End != nil {
-		l = m.End.Size()
-		n += 1 + l + sovXref(uint64(l))
-	}
-	return n
-}
-
-func (m *Location_Point) Size() (n int) {
-	var l int
-	_ = l
-	if m.ByteOffset != 0 {
-		n += 1 + sovXref(uint64(m.ByteOffset))
-	}
-	if m.LineNumber != 0 {
-		n += 1 + sovXref(uint64(m.LineNumber))
-	}
-	if m.ColumnOffset != 0 {
-		n += 1 + sovXref(uint64(m.ColumnOffset))
 	}
 	return n
 }
@@ -2837,6 +3080,9 @@ func (m *DecorationsRequest) Size() (n int) {
 	if m.ExtendsOverrides {
 		n += 2
 	}
+	if m.Diagnostics {
+		n += 2
+	}
 	if m.SpanKind != 0 {
 		n += 1 + sovXref(uint64(m.SpanKind))
 	}
@@ -2864,6 +3110,12 @@ func (m *DecorationsReply) Size() (n int) {
 			n += 1 + l + sovXref(uint64(l))
 		}
 	}
+	if len(m.Diagnostic) > 0 {
+		for _, e := range m.Diagnostic {
+			l = e.Size()
+			n += 1 + l + sovXref(uint64(l))
+		}
+	}
 	if len(m.Nodes) > 0 {
 		for k, v := range m.Nodes {
 			_ = k
@@ -2871,8 +3123,9 @@ func (m *DecorationsReply) Size() (n int) {
 			l = 0
 			if v != nil {
 				l = v.Size()
+				l += 1 + sovXref(uint64(l))
 			}
-			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + l + sovXref(uint64(l))
+			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + l
 			n += mapEntrySize + 1 + sovXref(uint64(mapEntrySize))
 		}
 	}
@@ -2883,8 +3136,9 @@ func (m *DecorationsReply) Size() (n int) {
 			l = 0
 			if v != nil {
 				l = v.Size()
+				l += 1 + sovXref(uint64(l))
 			}
-			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + l + sovXref(uint64(l))
+			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + l
 			n += mapEntrySize + 2 + sovXref(uint64(mapEntrySize))
 		}
 	}
@@ -2895,8 +3149,9 @@ func (m *DecorationsReply) Size() (n int) {
 			l = 0
 			if v != nil {
 				l = v.Size()
+				l += 1 + sovXref(uint64(l))
 			}
-			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + l + sovXref(uint64(l))
+			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + l
 			n += mapEntrySize + 2 + sovXref(uint64(mapEntrySize))
 		}
 	}
@@ -2906,10 +3161,6 @@ func (m *DecorationsReply) Size() (n int) {
 func (m *DecorationsReply_Reference) Size() (n int) {
 	var l int
 	_ = l
-	l = len(m.SourceTicket)
-	if l > 0 {
-		n += 1 + l + sovXref(uint64(l))
-	}
 	l = len(m.TargetTicket)
 	if l > 0 {
 		n += 1 + l + sovXref(uint64(l))
@@ -2922,12 +3173,8 @@ func (m *DecorationsReply_Reference) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovXref(uint64(l))
 	}
-	if m.AnchorStart != nil {
-		l = m.AnchorStart.Size()
-		n += 1 + l + sovXref(uint64(l))
-	}
-	if m.AnchorEnd != nil {
-		l = m.AnchorEnd.Size()
+	if m.Span != nil {
+		l = m.Span.Size()
 		n += 1 + l + sovXref(uint64(l))
 	}
 	return n
@@ -2936,19 +3183,19 @@ func (m *DecorationsReply_Reference) Size() (n int) {
 func (m *DecorationsReply_Override) Size() (n int) {
 	var l int
 	_ = l
-	l = len(m.Ticket)
+	l = len(m.Target)
 	if l > 0 {
 		n += 1 + l + sovXref(uint64(l))
 	}
 	if m.Kind != 0 {
 		n += 1 + sovXref(uint64(m.Kind))
 	}
-	if m.DisplayName != nil {
-		l = m.DisplayName.Size()
-		n += 1 + l + sovXref(uint64(l))
-	}
 	if m.MarkedSource != nil {
 		l = m.MarkedSource.Size()
+		n += 1 + l + sovXref(uint64(l))
+	}
+	l = len(m.TargetDefinition)
+	if l > 0 {
 		n += 1 + l + sovXref(uint64(l))
 	}
 	return n
@@ -2980,9 +3227,6 @@ func (m *CrossReferencesRequest) Size() (n int) {
 	}
 	if m.ReferenceKind != 0 {
 		n += 1 + sovXref(uint64(m.ReferenceKind))
-	}
-	if m.DocumentationKind != 0 {
-		n += 1 + sovXref(uint64(m.DocumentationKind))
 	}
 	if len(m.Filter) > 0 {
 		for _, s := range m.Filter {
@@ -3030,14 +3274,6 @@ func (m *Anchor) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovXref(uint64(l))
 	}
-	if m.Start != nil {
-		l = m.Start.Size()
-		n += 1 + l + sovXref(uint64(l))
-	}
-	if m.End != nil {
-		l = m.End.Size()
-		n += 1 + l + sovXref(uint64(l))
-	}
 	l = len(m.Text)
 	if l > 0 {
 		n += 1 + l + sovXref(uint64(l))
@@ -3046,12 +3282,12 @@ func (m *Anchor) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovXref(uint64(l))
 	}
-	if m.SnippetStart != nil {
-		l = m.SnippetStart.Size()
+	if m.Span != nil {
+		l = m.Span.Size()
 		n += 1 + l + sovXref(uint64(l))
 	}
-	if m.SnippetEnd != nil {
-		l = m.SnippetEnd.Size()
+	if m.SnippetSpan != nil {
+		l = m.SnippetSpan.Size()
 		n += 1 + l + sovXref(uint64(l))
 	}
 	return n
@@ -3140,8 +3376,9 @@ func (m *CrossReferencesReply) Size() (n int) {
 			l = 0
 			if v != nil {
 				l = v.Size()
+				l += 1 + sovXref(uint64(l))
 			}
-			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + l + sovXref(uint64(l))
+			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + l
 			n += mapEntrySize + 1 + sovXref(uint64(mapEntrySize))
 		}
 	}
@@ -3152,8 +3389,9 @@ func (m *CrossReferencesReply) Size() (n int) {
 			l = 0
 			if v != nil {
 				l = v.Size()
+				l += 1 + sovXref(uint64(l))
 			}
-			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + l + sovXref(uint64(l))
+			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + l
 			n += mapEntrySize + 1 + sovXref(uint64(mapEntrySize))
 		}
 	}
@@ -3164,8 +3402,9 @@ func (m *CrossReferencesReply) Size() (n int) {
 			l = 0
 			if v != nil {
 				l = v.Size()
+				l += 1 + sovXref(uint64(l))
 			}
-			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + l + sovXref(uint64(l))
+			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + l
 			n += mapEntrySize + 1 + sovXref(uint64(mapEntrySize))
 		}
 	}
@@ -3204,10 +3443,6 @@ func (m *CrossReferencesReply_RelatedAnchor) Size() (n int) {
 		l = m.Anchor.Size()
 		n += 1 + l + sovXref(uint64(l))
 	}
-	if m.DisplayName != nil {
-		l = m.DisplayName.Size()
-		n += 1 + l + sovXref(uint64(l))
-	}
 	if len(m.Site) > 0 {
 		for _, e := range m.Site {
 			l = e.Size()
@@ -3244,12 +3479,6 @@ func (m *CrossReferencesReply_CrossReferenceSet) Size() (n int) {
 			n += 1 + l + sovXref(uint64(l))
 		}
 	}
-	if len(m.Documentation) > 0 {
-		for _, e := range m.Documentation {
-			l = e.Size()
-			n += 1 + l + sovXref(uint64(l))
-		}
-	}
 	if len(m.Declaration) > 0 {
 		for _, e := range m.Declaration {
 			l = e.Size()
@@ -3261,10 +3490,6 @@ func (m *CrossReferencesReply_CrossReferenceSet) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovXref(uint64(l))
 		}
-	}
-	if m.DisplayName != nil {
-		l = m.DisplayName.Size()
-		n += 1 + l + sovXref(uint64(l))
 	}
 	if m.MarkedSource != nil {
 		l = m.MarkedSource.Size()
@@ -3323,6 +3548,9 @@ func (m *DocumentationRequest) Size() (n int) {
 			n += 1 + l + sovXref(uint64(l))
 		}
 	}
+	if m.IncludeChildren {
+		n += 2
+	}
 	return n
 }
 
@@ -3342,8 +3570,9 @@ func (m *DocumentationReply) Size() (n int) {
 			l = 0
 			if v != nil {
 				l = v.Size()
+				l += 1 + sovXref(uint64(l))
 			}
-			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + l + sovXref(uint64(l))
+			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + l
 			n += mapEntrySize + 1 + sovXref(uint64(mapEntrySize))
 		}
 	}
@@ -3354,8 +3583,9 @@ func (m *DocumentationReply) Size() (n int) {
 			l = 0
 			if v != nil {
 				l = v.Size()
+				l += 1 + sovXref(uint64(l))
 			}
-			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + 1 + l + sovXref(uint64(l))
+			mapEntrySize := 1 + len(k) + sovXref(uint64(len(k))) + l
 			n += mapEntrySize + 1 + sovXref(uint64(mapEntrySize))
 		}
 	}
@@ -3393,6 +3623,12 @@ func (m *DocumentationReply_Document) Size() (n int) {
 		l = m.MarkedSource.Size()
 		n += 1 + l + sovXref(uint64(l))
 	}
+	if len(m.Children) > 0 {
+		for _, e := range m.Children {
+			l = e.Size()
+			n += 1 + l + sovXref(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -3409,8 +3645,8 @@ func sovXref(x uint64) (n int) {
 func sozXref(x uint64) (n int) {
 	return sovXref(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *Location) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Location) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3422,7 +3658,7 @@ func (m *Location) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3450,7 +3686,7 @@ func (m *Location) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3465,7 +3701,7 @@ func (m *Location) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = string(data[iNdEx:postIndex])
+			m.Ticket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -3479,16 +3715,16 @@ func (m *Location) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Kind |= (Location_Kind(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-		case 3:
+		case 5:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Start", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3498,7 +3734,7 @@ func (m *Location) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3512,49 +3748,16 @@ func (m *Location) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Start == nil {
-				m.Start = &Location_Point{}
+			if m.Span == nil {
+				m.Span = &kythe_proto_common.Span{}
 			}
-			if err := m.Start.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field End", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.End == nil {
-				m.End = &Location_Point{}
-			}
-			if err := m.End.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -3573,8 +3776,8 @@ func (m *Location) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Location_Point) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DecorationsRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3586,114 +3789,7 @@ func (m *Location_Point) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Point: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Point: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ByteOffset", wireType)
-			}
-			m.ByteOffset = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.ByteOffset |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LineNumber", wireType)
-			}
-			m.LineNumber = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.LineNumber |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ColumnOffset", wireType)
-			}
-			m.ColumnOffset = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.ColumnOffset |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthXref
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *DecorationsRequest) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowXref
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3721,7 +3817,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3738,7 +3834,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 			if m.Location == nil {
 				m.Location = &Location{}
 			}
-			if err := m.Location.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Location.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3754,7 +3850,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3768,7 +3864,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.DirtyBuffer = append(m.DirtyBuffer[:0], data[iNdEx:postIndex]...)
+			m.DirtyBuffer = append(m.DirtyBuffer[:0], dAtA[iNdEx:postIndex]...)
 			if m.DirtyBuffer == nil {
 				m.DirtyBuffer = []byte{}
 			}
@@ -3785,7 +3881,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3805,7 +3901,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3825,7 +3921,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3840,7 +3936,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Filter = append(m.Filter, string(data[iNdEx:postIndex]))
+			m.Filter = append(m.Filter, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 6:
 			if wireType != 0 {
@@ -3854,7 +3950,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3874,7 +3970,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3882,6 +3978,26 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 				}
 			}
 			m.ExtendsOverrides = bool(v != 0)
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Diagnostics", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowXref
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Diagnostics = bool(v != 0)
 		case 10:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field SpanKind", wireType)
@@ -3894,7 +4010,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.SpanKind |= (DecorationsRequest_SpanKind(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3903,7 +4019,7 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -3922,8 +4038,8 @@ func (m *DecorationsRequest) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DecorationsReply) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DecorationsReply) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3935,7 +4051,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3963,7 +4079,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3980,7 +4096,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 			if m.Location == nil {
 				m.Location = &Location{}
 			}
-			if err := m.Location.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Location.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3996,7 +4112,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4010,7 +4126,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.SourceText = append(m.SourceText[:0], data[iNdEx:postIndex]...)
+			m.SourceText = append(m.SourceText[:0], dAtA[iNdEx:postIndex]...)
 			if m.SourceText == nil {
 				m.SourceText = []byte{}
 			}
@@ -4027,7 +4143,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4042,7 +4158,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Encoding = string(data[iNdEx:postIndex])
+			m.Encoding = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -4056,7 +4172,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4071,7 +4187,38 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Reference = append(m.Reference, &DecorationsReply_Reference{})
-			if err := m.Reference[len(m.Reference)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Reference[len(m.Reference)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Diagnostic", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowXref
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthXref
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Diagnostic = append(m.Diagnostic, &kythe_proto_common.Diagnostic{})
+			if err := m.Diagnostic[len(m.Diagnostic)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4087,7 +4234,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4109,7 +4256,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4124,7 +4271,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4139,57 +4286,62 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapmsglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &kythe_proto_common.NodeInfo{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
 			if m.Nodes == nil {
 				m.Nodes = make(map[string]*kythe_proto_common.NodeInfo)
 			}
-			m.Nodes[mapkey] = mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapmsglen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					mapmsglen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				postmsgIndex := iNdEx + mapmsglen
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				if postmsgIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := &kythe_proto_common.NodeInfo{}
+				if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+					return err
+				}
+				iNdEx = postmsgIndex
+				m.Nodes[mapkey] = mapvalue
+			} else {
+				var mapvalue *kythe_proto_common.NodeInfo
+				m.Nodes[mapkey] = mapvalue
+			}
 			iNdEx = postIndex
 		case 16:
 			if wireType != 2 {
@@ -4203,7 +4355,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4225,7 +4377,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4240,7 +4392,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4255,57 +4407,62 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapmsglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &Anchor{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
 			if m.DefinitionLocations == nil {
 				m.DefinitionLocations = make(map[string]*Anchor)
 			}
-			m.DefinitionLocations[mapkey] = mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapmsglen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					mapmsglen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				postmsgIndex := iNdEx + mapmsglen
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				if postmsgIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := &Anchor{}
+				if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+					return err
+				}
+				iNdEx = postmsgIndex
+				m.DefinitionLocations[mapkey] = mapvalue
+			} else {
+				var mapvalue *Anchor
+				m.DefinitionLocations[mapkey] = mapvalue
+			}
 			iNdEx = postIndex
 		case 17:
 			if wireType != 2 {
@@ -4319,7 +4476,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4341,7 +4498,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4356,7 +4513,7 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4371,61 +4528,66 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapmsglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &DecorationsReply_Overrides{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
 			if m.ExtendsOverrides == nil {
 				m.ExtendsOverrides = make(map[string]*DecorationsReply_Overrides)
 			}
-			m.ExtendsOverrides[mapkey] = mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapmsglen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					mapmsglen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				postmsgIndex := iNdEx + mapmsglen
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				if postmsgIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := &DecorationsReply_Overrides{}
+				if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+					return err
+				}
+				iNdEx = postmsgIndex
+				m.ExtendsOverrides[mapkey] = mapvalue
+			} else {
+				var mapvalue *DecorationsReply_Overrides
+				m.ExtendsOverrides[mapkey] = mapvalue
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4444,8 +4606,8 @@ func (m *DecorationsReply) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DecorationsReply_Reference) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4457,7 +4619,7 @@ func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4473,35 +4635,6 @@ func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
 			return fmt.Errorf("proto: Reference: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SourceTicket", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.SourceTicket = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field TargetTicket", wireType)
@@ -4514,7 +4647,7 @@ func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4529,7 +4662,7 @@ func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.TargetTicket = string(data[iNdEx:postIndex])
+			m.TargetTicket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -4543,7 +4676,7 @@ func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4558,7 +4691,7 @@ func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Kind = string(data[iNdEx:postIndex])
+			m.Kind = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -4572,7 +4705,7 @@ func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4587,11 +4720,11 @@ func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.TargetDefinition = string(data[iNdEx:postIndex])
+			m.TargetDefinition = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 10:
+		case 5:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AnchorStart", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4601,7 +4734,7 @@ func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4615,49 +4748,16 @@ func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.AnchorStart == nil {
-				m.AnchorStart = &Location_Point{}
+			if m.Span == nil {
+				m.Span = &kythe_proto_common.Span{}
 			}
-			if err := m.AnchorStart.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 11:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AnchorEnd", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.AnchorEnd == nil {
-				m.AnchorEnd = &Location_Point{}
-			}
-			if err := m.AnchorEnd.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4676,8 +4776,8 @@ func (m *DecorationsReply_Reference) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DecorationsReply_Override) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DecorationsReply_Override) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4689,7 +4789,7 @@ func (m *DecorationsReply_Override) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4707,7 +4807,7 @@ func (m *DecorationsReply_Override) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Ticket", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Target", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -4717,7 +4817,7 @@ func (m *DecorationsReply_Override) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4732,7 +4832,7 @@ func (m *DecorationsReply_Override) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = string(data[iNdEx:postIndex])
+			m.Target = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -4746,46 +4846,13 @@ func (m *DecorationsReply_Override) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Kind |= (DecorationsReply_Override_Kind(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DisplayName", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.DisplayName == nil {
-				m.DisplayName = &Printable{}
-			}
-			if err := m.DisplayName.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field MarkedSource", wireType)
@@ -4798,7 +4865,7 @@ func (m *DecorationsReply_Override) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4815,13 +4882,42 @@ func (m *DecorationsReply_Override) Unmarshal(data []byte) error {
 			if m.MarkedSource == nil {
 				m.MarkedSource = &MarkedSource{}
 			}
-			if err := m.MarkedSource.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.MarkedSource.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TargetDefinition", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowXref
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthXref
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.TargetDefinition = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4840,8 +4936,8 @@ func (m *DecorationsReply_Override) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DecorationsReply_Overrides) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DecorationsReply_Overrides) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4853,7 +4949,7 @@ func (m *DecorationsReply_Overrides) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4881,7 +4977,7 @@ func (m *DecorationsReply_Overrides) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4896,13 +4992,13 @@ func (m *DecorationsReply_Overrides) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Override = append(m.Override, &DecorationsReply_Override{})
-			if err := m.Override[len(m.Override)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Override[len(m.Override)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4921,8 +5017,8 @@ func (m *DecorationsReply_Overrides) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *CrossReferencesRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4934,7 +5030,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4962,7 +5058,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4977,7 +5073,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = append(m.Ticket, string(data[iNdEx:postIndex]))
+			m.Ticket = append(m.Ticket, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -4991,7 +5087,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.DefinitionKind |= (CrossReferencesRequest_DefinitionKind(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5010,28 +5106,9 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ReferenceKind |= (CrossReferencesRequest_ReferenceKind(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DocumentationKind", wireType)
-			}
-			m.DocumentationKind = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.DocumentationKind |= (CrossReferencesRequest_DocumentationKind(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5048,7 +5125,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5063,7 +5140,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Filter = append(m.Filter, string(data[iNdEx:postIndex]))
+			m.Filter = append(m.Filter, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 6:
 			if wireType != 0 {
@@ -5077,7 +5154,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5097,7 +5174,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.DeclarationKind |= (CrossReferencesRequest_DeclarationKind(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5116,7 +5193,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5136,7 +5213,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.PageSize |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5155,7 +5232,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5170,7 +5247,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PageToken = string(data[iNdEx:postIndex])
+			m.PageToken = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 12:
 			if wireType != 0 {
@@ -5184,7 +5261,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.CallerKind |= (CrossReferencesRequest_CallerKind(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5203,7 +5280,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5213,7 +5290,7 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 			m.ExperimentalSignatures = bool(v != 0)
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -5232,8 +5309,8 @@ func (m *CrossReferencesRequest) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Anchor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Anchor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -5245,7 +5322,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -5273,7 +5350,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5288,7 +5365,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = string(data[iNdEx:postIndex])
+			m.Ticket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -5302,7 +5379,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5317,7 +5394,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Kind = string(data[iNdEx:postIndex])
+			m.Kind = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -5331,7 +5408,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5346,73 +5423,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Parent = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Start", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Start == nil {
-				m.Start = &Location_Point{}
-			}
-			if err := m.Start.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 5:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field End", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.End == nil {
-				m.End = &Location_Point{}
-			}
-			if err := m.End.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
+			m.Parent = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 6:
 			if wireType != 2 {
@@ -5426,7 +5437,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5441,7 +5452,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Text = string(data[iNdEx:postIndex])
+			m.Text = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 7:
 			if wireType != 2 {
@@ -5455,7 +5466,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5470,11 +5481,11 @@ func (m *Anchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Snippet = string(data[iNdEx:postIndex])
+			m.Snippet = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 8:
+		case 10:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SnippetStart", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Span", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -5484,7 +5495,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5498,16 +5509,16 @@ func (m *Anchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.SnippetStart == nil {
-				m.SnippetStart = &Location_Point{}
+			if m.Span == nil {
+				m.Span = &kythe_proto_common.Span{}
 			}
-			if err := m.SnippetStart.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Span.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
-		case 9:
+		case 11:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SnippetEnd", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SnippetSpan", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -5517,7 +5528,7 @@ func (m *Anchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5531,16 +5542,16 @@ func (m *Anchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.SnippetEnd == nil {
-				m.SnippetEnd = &Location_Point{}
+			if m.SnippetSpan == nil {
+				m.SnippetSpan = &kythe_proto_common.Span{}
 			}
-			if err := m.SnippetEnd.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.SnippetSpan.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -5559,8 +5570,8 @@ func (m *Anchor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Link) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Link) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -5572,7 +5583,7 @@ func (m *Link) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -5600,7 +5611,7 @@ func (m *Link) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Kind |= (Link_Kind(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5619,7 +5630,7 @@ func (m *Link) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5634,11 +5645,11 @@ func (m *Link) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Definition = append(m.Definition, string(data[iNdEx:postIndex]))
+			m.Definition = append(m.Definition, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -5657,8 +5668,8 @@ func (m *Link) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Printable) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Printable) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -5670,7 +5681,7 @@ func (m *Printable) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -5698,7 +5709,7 @@ func (m *Printable) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5713,7 +5724,7 @@ func (m *Printable) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RawText = string(data[iNdEx:postIndex])
+			m.RawText = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -5727,7 +5738,7 @@ func (m *Printable) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5742,13 +5753,13 @@ func (m *Printable) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Link = append(m.Link, &Link{})
-			if err := m.Link[len(m.Link)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Link[len(m.Link)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -5767,8 +5778,8 @@ func (m *Printable) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *MarkedSource) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *MarkedSource) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -5780,7 +5791,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -5808,7 +5819,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Kind |= (MarkedSource_Kind(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5827,7 +5838,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5842,7 +5853,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PreText = string(data[iNdEx:postIndex])
+			m.PreText = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -5856,7 +5867,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5871,7 +5882,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Child = append(m.Child, &MarkedSource{})
-			if err := m.Child[len(m.Child)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Child[len(m.Child)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -5887,7 +5898,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5902,7 +5913,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PostChildText = string(data[iNdEx:postIndex])
+			m.PostChildText = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -5916,7 +5927,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5931,7 +5942,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PostText = string(data[iNdEx:postIndex])
+			m.PostText = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 6:
 			if wireType != 0 {
@@ -5945,7 +5956,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.LookupIndex |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5964,7 +5975,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.DefaultChildrenCount |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5983,7 +5994,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6003,7 +6014,7 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6018,13 +6029,13 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Link = append(m.Link, &Link{})
-			if err := m.Link[len(m.Link)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Link[len(m.Link)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -6043,8 +6054,8 @@ func (m *MarkedSource) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CrossReferencesReply) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *CrossReferencesReply) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -6056,7 +6067,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -6084,7 +6095,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6106,7 +6117,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6121,7 +6132,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6136,57 +6147,62 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapmsglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &CrossReferencesReply_CrossReferenceSet{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
 			if m.CrossReferences == nil {
 				m.CrossReferences = make(map[string]*CrossReferencesReply_CrossReferenceSet)
 			}
-			m.CrossReferences[mapkey] = mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapmsglen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					mapmsglen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				postmsgIndex := iNdEx + mapmsglen
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				if postmsgIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := &CrossReferencesReply_CrossReferenceSet{}
+				if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+					return err
+				}
+				iNdEx = postmsgIndex
+				m.CrossReferences[mapkey] = mapvalue
+			} else {
+				var mapvalue *CrossReferencesReply_CrossReferenceSet
+				m.CrossReferences[mapkey] = mapvalue
+			}
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -6200,7 +6216,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6222,7 +6238,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6237,7 +6253,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6252,57 +6268,62 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapmsglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &kythe_proto_common.NodeInfo{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
 			if m.Nodes == nil {
 				m.Nodes = make(map[string]*kythe_proto_common.NodeInfo)
 			}
-			m.Nodes[mapkey] = mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapmsglen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					mapmsglen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				postmsgIndex := iNdEx + mapmsglen
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				if postmsgIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := &kythe_proto_common.NodeInfo{}
+				if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+					return err
+				}
+				iNdEx = postmsgIndex
+				m.Nodes[mapkey] = mapvalue
+			} else {
+				var mapvalue *kythe_proto_common.NodeInfo
+				m.Nodes[mapkey] = mapvalue
+			}
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -6316,7 +6337,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6338,7 +6359,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6353,7 +6374,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6368,57 +6389,62 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapmsglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &Anchor{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
 			if m.DefinitionLocations == nil {
 				m.DefinitionLocations = make(map[string]*Anchor)
 			}
-			m.DefinitionLocations[mapkey] = mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapmsglen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					mapmsglen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				postmsgIndex := iNdEx + mapmsglen
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				if postmsgIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := &Anchor{}
+				if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+					return err
+				}
+				iNdEx = postmsgIndex
+				m.DefinitionLocations[mapkey] = mapvalue
+			} else {
+				var mapvalue *Anchor
+				m.DefinitionLocations[mapkey] = mapvalue
+			}
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -6432,7 +6458,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6449,7 +6475,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 			if m.Total == nil {
 				m.Total = &CrossReferencesReply_Total{}
 			}
-			if err := m.Total.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Total.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -6465,7 +6491,7 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6480,11 +6506,11 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.NextPageToken = string(data[iNdEx:postIndex])
+			m.NextPageToken = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -6503,8 +6529,8 @@ func (m *CrossReferencesReply) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CrossReferencesReply_RelatedNode) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *CrossReferencesReply_RelatedNode) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -6516,7 +6542,7 @@ func (m *CrossReferencesReply_RelatedNode) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -6544,7 +6570,7 @@ func (m *CrossReferencesReply_RelatedNode) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6559,7 +6585,7 @@ func (m *CrossReferencesReply_RelatedNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = string(data[iNdEx:postIndex])
+			m.Ticket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -6573,7 +6599,7 @@ func (m *CrossReferencesReply_RelatedNode) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6588,7 +6614,7 @@ func (m *CrossReferencesReply_RelatedNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RelationKind = string(data[iNdEx:postIndex])
+			m.RelationKind = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 0 {
@@ -6602,7 +6628,7 @@ func (m *CrossReferencesReply_RelatedNode) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Ordinal |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6611,7 +6637,7 @@ func (m *CrossReferencesReply_RelatedNode) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -6630,8 +6656,8 @@ func (m *CrossReferencesReply_RelatedNode) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -6643,7 +6669,7 @@ func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -6671,7 +6697,7 @@ func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6688,40 +6714,7 @@ func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(data []byte) error {
 			if m.Anchor == nil {
 				m.Anchor = &Anchor{}
 			}
-			if err := m.Anchor.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DisplayName", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.DisplayName == nil {
-				m.DisplayName = &Printable{}
-			}
-			if err := m.DisplayName.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Anchor.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -6737,7 +6730,7 @@ func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6752,7 +6745,7 @@ func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Site = append(m.Site, &Anchor{})
-			if err := m.Site[len(m.Site)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Site[len(m.Site)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -6768,7 +6761,7 @@ func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6783,7 +6776,7 @@ func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = string(data[iNdEx:postIndex])
+			m.Ticket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -6797,7 +6790,7 @@ func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6814,13 +6807,13 @@ func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(data []byte) error {
 			if m.MarkedSource == nil {
 				m.MarkedSource = &MarkedSource{}
 			}
-			if err := m.MarkedSource.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.MarkedSource.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -6839,8 +6832,8 @@ func (m *CrossReferencesReply_RelatedAnchor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -6852,7 +6845,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -6880,7 +6873,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6895,7 +6888,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = string(data[iNdEx:postIndex])
+			m.Ticket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -6909,7 +6902,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6924,7 +6917,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Definition = append(m.Definition, &CrossReferencesReply_RelatedAnchor{})
-			if err := m.Definition[len(m.Definition)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Definition[len(m.Definition)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -6940,7 +6933,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -6955,38 +6948,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Reference = append(m.Reference, &CrossReferencesReply_RelatedAnchor{})
-			if err := m.Reference[len(m.Reference)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Documentation", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Documentation = append(m.Documentation, &CrossReferencesReply_RelatedAnchor{})
-			if err := m.Documentation[len(m.Documentation)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Reference[len(m.Reference)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7002,7 +6964,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7017,7 +6979,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Declaration = append(m.Declaration, &CrossReferencesReply_RelatedAnchor{})
-			if err := m.Declaration[len(m.Declaration)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Declaration[len(m.Declaration)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7033,7 +6995,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7048,40 +7010,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Caller = append(m.Caller, &CrossReferencesReply_RelatedAnchor{})
-			if err := m.Caller[len(m.Caller)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 7:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DisplayName", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.DisplayName == nil {
-				m.DisplayName = &Printable{}
-			}
-			if err := m.DisplayName.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Caller[len(m.Caller)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7097,7 +7026,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7114,7 +7043,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 			if m.MarkedSource == nil {
 				m.MarkedSource = &MarkedSource{}
 			}
-			if err := m.MarkedSource.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.MarkedSource.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7130,7 +7059,7 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7145,13 +7074,13 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.RelatedNode = append(m.RelatedNode, &CrossReferencesReply_RelatedNode{})
-			if err := m.RelatedNode[len(m.RelatedNode)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.RelatedNode[len(m.RelatedNode)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -7170,8 +7099,8 @@ func (m *CrossReferencesReply_CrossReferenceSet) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *CrossReferencesReply_Total) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -7183,7 +7112,7 @@ func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -7211,7 +7140,7 @@ func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Definitions |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7230,7 +7159,7 @@ func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Declarations |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7249,7 +7178,7 @@ func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.References |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7268,7 +7197,7 @@ func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Documentation |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7287,7 +7216,7 @@ func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Callers |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7306,7 +7235,7 @@ func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7328,7 +7257,7 @@ func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7343,7 +7272,7 @@ func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7358,46 +7287,51 @@ func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapvalue int64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapvalue |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 			if m.RelatedNodesByRelation == nil {
 				m.RelatedNodesByRelation = make(map[string]int64)
 			}
-			m.RelatedNodesByRelation[mapkey] = mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapvalue int64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					mapvalue |= (int64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.RelatedNodesByRelation[mapkey] = mapvalue
+			} else {
+				var mapvalue int64
+				m.RelatedNodesByRelation[mapkey] = mapvalue
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -7416,8 +7350,8 @@ func (m *CrossReferencesReply_Total) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DocumentationRequest) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DocumentationRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -7429,7 +7363,7 @@ func (m *DocumentationRequest) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -7457,7 +7391,7 @@ func (m *DocumentationRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7472,7 +7406,7 @@ func (m *DocumentationRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = append(m.Ticket, string(data[iNdEx:postIndex]))
+			m.Ticket = append(m.Ticket, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -7486,7 +7420,7 @@ func (m *DocumentationRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7501,11 +7435,31 @@ func (m *DocumentationRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Filter = append(m.Filter, string(data[iNdEx:postIndex]))
+			m.Filter = append(m.Filter, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IncludeChildren", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowXref
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IncludeChildren = bool(v != 0)
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -7524,8 +7478,8 @@ func (m *DocumentationRequest) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DocumentationReply) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DocumentationReply) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -7537,7 +7491,7 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -7565,7 +7519,7 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7580,7 +7534,7 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Document = append(m.Document, &DocumentationReply_Document{})
-			if err := m.Document[len(m.Document)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Document[len(m.Document)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7596,7 +7550,7 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7618,7 +7572,7 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7633,7 +7587,7 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7648,57 +7602,62 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapmsglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &kythe_proto_common.NodeInfo{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
 			if m.Nodes == nil {
 				m.Nodes = make(map[string]*kythe_proto_common.NodeInfo)
 			}
-			m.Nodes[mapkey] = mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapmsglen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					mapmsglen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				postmsgIndex := iNdEx + mapmsglen
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				if postmsgIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := &kythe_proto_common.NodeInfo{}
+				if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+					return err
+				}
+				iNdEx = postmsgIndex
+				m.Nodes[mapkey] = mapvalue
+			} else {
+				var mapvalue *kythe_proto_common.NodeInfo
+				m.Nodes[mapkey] = mapvalue
+			}
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -7712,7 +7671,7 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7734,7 +7693,7 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7749,7 +7708,7 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7764,61 +7723,66 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
-			var valuekey uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				valuekey |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			var mapmsglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowXref
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthXref
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &Anchor{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
 			if m.DefinitionLocations == nil {
 				m.DefinitionLocations = make(map[string]*Anchor)
 			}
-			m.DefinitionLocations[mapkey] = mapvalue
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var mapmsglen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowXref
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					mapmsglen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				postmsgIndex := iNdEx + mapmsglen
+				if mapmsglen < 0 {
+					return ErrInvalidLengthXref
+				}
+				if postmsgIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := &Anchor{}
+				if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+					return err
+				}
+				iNdEx = postmsgIndex
+				m.DefinitionLocations[mapkey] = mapvalue
+			} else {
+				var mapvalue *Anchor
+				m.DefinitionLocations[mapkey] = mapvalue
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -7837,8 +7801,8 @@ func (m *DocumentationReply) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DocumentationReply_Document) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -7850,7 +7814,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -7878,7 +7842,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7893,7 +7857,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ticket = string(data[iNdEx:postIndex])
+			m.Ticket = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -7907,7 +7871,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7924,7 +7888,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 			if m.Text == nil {
 				m.Text = &Printable{}
 			}
-			if err := m.Text.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Text.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7940,7 +7904,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7957,7 +7921,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 			if m.Signature == nil {
 				m.Signature = &Printable{}
 			}
-			if err := m.Signature.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Signature.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7973,7 +7937,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -7990,7 +7954,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 			if m.Type == nil {
 				m.Type = &Printable{}
 			}
-			if err := m.Type.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Type.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -8006,7 +7970,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -8023,7 +7987,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 			if m.Initializer == nil {
 				m.Initializer = &Printable{}
 			}
-			if err := m.Initializer.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Initializer.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -8039,7 +8003,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -8056,7 +8020,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 			if m.DefinedBy == nil {
 				m.DefinedBy = &Printable{}
 			}
-			if err := m.DefinedBy.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.DefinedBy.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -8072,7 +8036,7 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -8089,13 +8053,44 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 			if m.MarkedSource == nil {
 				m.MarkedSource = &MarkedSource{}
 			}
-			if err := m.MarkedSource.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.MarkedSource.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Children", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowXref
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthXref
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Children = append(m.Children, &DocumentationReply_Document{})
+			if err := m.Children[len(m.Children)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipXref(data[iNdEx:])
+			skippy, err := skipXref(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -8114,8 +8109,8 @@ func (m *DocumentationReply_Document) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipXref(data []byte) (n int, err error) {
-	l := len(data)
+func skipXref(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -8126,7 +8121,7 @@ func skipXref(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -8144,7 +8139,7 @@ func skipXref(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -8161,7 +8156,7 @@ func skipXref(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -8184,7 +8179,7 @@ func skipXref(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -8195,7 +8190,7 @@ func skipXref(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipXref(data[start:])
+				next, err := skipXref(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}
@@ -8219,159 +8214,156 @@ var (
 	ErrIntOverflowXref   = fmt.Errorf("proto: integer overflow")
 )
 
+func init() { proto.RegisterFile("kythe/proto/xref.proto", fileDescriptorXref) }
+
 var fileDescriptorXref = []byte{
-	// 2440 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xd4, 0x19, 0xcb, 0x72, 0xdb, 0xc8,
-	0x51, 0xe0, 0x43, 0x04, 0x9b, 0xa4, 0x04, 0x8d, 0x65, 0x2d, 0x4d, 0xc7, 0xb2, 0x0c, 0x27, 0x6b,
-	0xad, 0xbd, 0x96, 0xcb, 0xf2, 0x6e, 0xe2, 0xb8, 0xf6, 0x61, 0x89, 0x82, 0x36, 0xdc, 0x95, 0x48,
-	0x65, 0x48, 0x6d, 0xbc, 0x71, 0x55, 0x10, 0x88, 0x18, 0xca, 0x28, 0x41, 0x00, 0x03, 0x40, 0xb6,
-	0xe8, 0x43, 0x0e, 0xb9, 0xe6, 0xb6, 0x95, 0x43, 0xf2, 0x07, 0xa9, 0xca, 0x07, 0xe4, 0x96, 0xca,
-	0x31, 0xc7, 0x7c, 0x40, 0x0e, 0x29, 0x27, 0x55, 0x7b, 0xcc, 0x75, 0x8f, 0xa9, 0x79, 0x80, 0x1c,
-	0xf0, 0x29, 0x79, 0x4f, 0x7b, 0xc3, 0xf4, 0x74, 0xf7, 0xf4, 0x74, 0xf7, 0xf4, 0x0b, 0xb0, 0x72,
-	0xd2, 0x8b, 0x5e, 0x90, 0x07, 0xdd, 0xc0, 0x8f, 0xfc, 0x07, 0xe7, 0x01, 0xe9, 0x6c, 0xb0, 0x4f,
-	0x54, 0x60, 0x70, 0xbe, 0xa8, 0x94, 0x65, 0xa4, 0xb6, 0x7f, 0x7a, 0xea, 0x7b, 0x7c, 0x47, 0xff,
-	0x7b, 0x0a, 0xd4, 0x3d, 0xbf, 0x6d, 0x45, 0x8e, 0xef, 0xa1, 0x15, 0x98, 0x8f, 0x9c, 0xf6, 0x09,
-	0x89, 0xca, 0xca, 0x9a, 0xb2, 0x9e, 0xc7, 0x62, 0x85, 0x36, 0x20, 0x73, 0xe2, 0x78, 0x76, 0x39,
-	0xb5, 0xa6, 0xac, 0x2f, 0x6c, 0x56, 0x36, 0x24, 0xd6, 0x1b, 0x31, 0xf1, 0xc6, 0x17, 0x8e, 0x67,
-	0x63, 0x86, 0x87, 0x1e, 0x42, 0x36, 0x8c, 0xac, 0x20, 0x2a, 0xa7, 0xd7, 0x94, 0xf5, 0xc2, 0xe6,
-	0xf5, 0xf1, 0x04, 0x07, 0xbe, 0xe3, 0x45, 0x98, 0x63, 0xa2, 0xfb, 0x90, 0x26, 0x9e, 0x5d, 0xce,
-	0xcc, 0x26, 0xa0, 0x78, 0x15, 0x0f, 0xb2, 0x6c, 0x85, 0x6e, 0x42, 0xe1, 0xa8, 0x17, 0x11, 0xd3,
-	0xef, 0x74, 0x42, 0x21, 0x77, 0x16, 0x03, 0x05, 0x35, 0x18, 0x84, 0x22, 0xb8, 0x8e, 0x47, 0x4c,
-	0xef, 0xec, 0xf4, 0x88, 0x04, 0xec, 0x0a, 0x59, 0x0c, 0x14, 0x54, 0x67, 0x10, 0x74, 0x1b, 0x4a,
-	0x6d, 0xdf, 0x3d, 0x3b, 0xf5, 0x62, 0x1e, 0x69, 0x86, 0x52, 0xe4, 0x40, 0xce, 0x45, 0xaf, 0x40,
-	0x86, 0xde, 0x0f, 0xa9, 0x90, 0xd9, 0xad, 0xed, 0x19, 0xda, 0x1c, 0xfd, 0x6a, 0x1e, 0x6c, 0xd5,
-	0x35, 0x45, 0xff, 0x43, 0x1a, 0xd0, 0x0e, 0x69, 0xfb, 0x01, 0x93, 0x32, 0xc4, 0xe4, 0x37, 0x67,
-	0x24, 0x8c, 0xd0, 0x43, 0x50, 0x5d, 0x21, 0x39, 0x13, 0xab, 0xb0, 0x79, 0x75, 0xec, 0xb5, 0x70,
-	0x1f, 0x0d, 0xdd, 0x82, 0xa2, 0xed, 0x04, 0x51, 0xcf, 0x3c, 0x3a, 0xeb, 0x74, 0x84, 0xb0, 0x45,
-	0x5c, 0x60, 0xb0, 0x6d, 0x06, 0xa2, 0xd7, 0x09, 0xfd, 0xb3, 0xa0, 0x4d, 0xcc, 0x88, 0x9c, 0x73,
-	0x59, 0x55, 0x0c, 0x1c, 0xd4, 0x22, 0xe7, 0x11, 0x5a, 0x05, 0x08, 0x48, 0x87, 0x04, 0xc4, 0x6b,
-	0x93, 0x90, 0xe9, 0x53, 0xc5, 0x12, 0x84, 0xda, 0xb8, 0xe3, 0xb8, 0x11, 0x09, 0xca, 0xd9, 0xb5,
-	0x34, 0xb5, 0x31, 0x5f, 0xa1, 0xfb, 0x80, 0x22, 0x2b, 0x38, 0x26, 0x91, 0x69, 0x93, 0x8e, 0xe3,
-	0x39, 0xec, 0x2e, 0xe5, 0x79, 0x46, 0xbf, 0xc4, 0x77, 0x76, 0x06, 0x1b, 0xe8, 0x1e, 0x2c, 0x91,
-	0xf3, 0x88, 0x78, 0x76, 0x68, 0xfa, 0x2f, 0x49, 0x10, 0x38, 0x36, 0x09, 0xcb, 0x39, 0x86, 0xad,
-	0x89, 0x8d, 0x46, 0x0c, 0x47, 0x06, 0xe4, 0xc3, 0xae, 0xe5, 0x99, 0xcc, 0x89, 0x80, 0x39, 0xd1,
-	0x7a, 0x42, 0x17, 0xa3, 0xea, 0xdb, 0x68, 0x76, 0x2d, 0x8f, 0xb9, 0x94, 0x1a, 0x8a, 0x2f, 0xfd,
-	0x7d, 0x50, 0x63, 0x28, 0x5a, 0x84, 0xc2, 0x2f, 0x6a, 0xad, 0x9f, 0xd5, 0xea, 0x26, 0xb3, 0xc2,
-	0x1c, 0x05, 0x6c, 0xe1, 0xc6, 0x61, 0x7d, 0xc7, 0x14, 0x66, 0xf9, 0x2f, 0x80, 0x96, 0xe0, 0xdb,
-	0x75, 0x7b, 0x6f, 0x63, 0x94, 0x21, 0x8d, 0x73, 0x9b, 0xc8, 0x1a, 0xaf, 0x80, 0x4a, 0xbc, 0xb6,
-	0x6f, 0x3b, 0xde, 0x31, 0xb3, 0x47, 0x1e, 0xf7, 0xd7, 0xf4, 0xe6, 0x7d, 0xdd, 0x97, 0x33, 0x6b,
-	0xe9, 0xf5, 0xc2, 0xe6, 0x9d, 0xc9, 0x37, 0xef, 0xba, 0xbd, 0x0d, 0x1c, 0xa3, 0xe3, 0x01, 0x25,
-	0xfa, 0x04, 0xb2, 0x9e, 0x4f, 0x35, 0xbc, 0xc8, 0x58, 0xac, 0x4f, 0x67, 0x51, 0xa7, 0xa8, 0x86,
-	0x17, 0x05, 0x3d, 0xcc, 0xc9, 0x90, 0x03, 0xcb, 0x03, 0xab, 0x9a, 0xf1, 0xd5, 0xc2, 0xb2, 0xc6,
-	0xd8, 0xfd, 0x78, 0x3a, 0xbb, 0x81, 0xd9, 0x63, 0xed, 0x08, 0xe6, 0x57, 0xec, 0xd1, 0x1d, 0xf4,
-	0xeb, 0x71, 0x8e, 0xb1, 0xc4, 0xce, 0x79, 0x34, 0xfd, 0x1c, 0x63, 0xc8, 0x6d, 0xf8, 0x21, 0x23,
-	0xde, 0x54, 0xf9, 0x3a, 0x05, 0xf9, 0xbe, 0x96, 0xe8, 0xf3, 0x8d, 0xcd, 0x23, 0x87, 0xae, 0xa2,
-	0x30, 0x10, 0x0f, 0x60, 0xb7, 0xa1, 0x24, 0x9c, 0x5b, 0x20, 0xa5, 0x38, 0x12, 0x07, 0x0a, 0x24,
-	0x24, 0xa2, 0x1c, 0xb7, 0x21, 0x8f, 0x64, 0xf7, 0x60, 0x69, 0xe4, 0x55, 0xb0, 0x47, 0x95, 0xc7,
-	0xda, 0xf0, 0xa3, 0x40, 0x9f, 0x40, 0xd1, 0xf2, 0xda, 0x2f, 0xfc, 0xc0, 0xe4, 0xd1, 0x0f, 0x66,
-	0x07, 0xb3, 0x02, 0x27, 0x68, 0xb2, 0x18, 0xf8, 0x04, 0x40, 0xd0, 0xd3, 0x50, 0x58, 0x98, 0x4d,
-	0x9d, 0xe7, 0xe8, 0x86, 0x67, 0x57, 0x7e, 0x97, 0x02, 0x35, 0x56, 0xd1, 0xc4, 0x38, 0xfe, 0x69,
-	0x22, 0x8e, 0xdf, 0x9b, 0x6e, 0x8e, 0x98, 0x9b, 0x1c, 0xd8, 0x7f, 0x4a, 0x03, 0x54, 0xd8, 0x75,
-	0xad, 0x9e, 0xe9, 0x59, 0xa7, 0x44, 0xc4, 0xf7, 0x95, 0x04, 0xa3, 0x83, 0xc0, 0xf1, 0x22, 0xeb,
-	0xc8, 0x25, 0x34, 0x70, 0x31, 0xdc, 0xba, 0x75, 0x4a, 0x5d, 0xb8, 0x74, 0x6a, 0x05, 0x27, 0xc4,
-	0x36, 0xb9, 0x65, 0x44, 0xa8, 0xbf, 0x96, 0xa0, 0xdd, 0x67, 0x18, 0x4d, 0x86, 0x80, 0x8b, 0xa7,
-	0xd2, 0x4a, 0xd7, 0x45, 0x04, 0x2e, 0x41, 0xbe, 0xf1, 0xa5, 0x81, 0x71, 0x6d, 0xc7, 0x68, 0x6a,
-	0x73, 0xa8, 0x00, 0x39, 0xe3, 0x59, 0xcb, 0xa8, 0xef, 0x34, 0x35, 0xa5, 0xd2, 0x80, 0xfc, 0x20,
-	0xe8, 0x6c, 0x83, 0x1a, 0x3b, 0x60, 0x59, 0x61, 0xfe, 0xf7, 0xee, 0xc5, 0x2e, 0x8c, 0xfb, 0x74,
-	0x95, 0x2f, 0x01, 0x06, 0x8f, 0x09, 0x69, 0x90, 0x3e, 0x21, 0x3d, 0xa1, 0x53, 0xfa, 0x89, 0x36,
-	0x21, 0xfb, 0xd2, 0x72, 0xcf, 0x08, 0xd3, 0x68, 0x61, 0xf3, 0x07, 0x89, 0x03, 0x44, 0x9e, 0xa5,
-	0x0c, 0x6a, 0x5e, 0xc7, 0xc7, 0x1c, 0xf5, 0x49, 0xea, 0xb1, 0x52, 0x79, 0x0e, 0xe5, 0x49, 0xaf,
-	0x6a, 0xcc, 0x29, 0xef, 0x25, 0x4f, 0xb9, 0x92, 0x38, 0x65, 0x8b, 0xb9, 0x80, 0xcc, 0xdc, 0x85,
-	0xab, 0x63, 0x9f, 0xd2, 0x18, 0xce, 0x1f, 0x27, 0x39, 0xdf, 0xb9, 0x98, 0x82, 0x42, 0xe9, 0x34,
-	0xfd, 0x7f, 0x2a, 0xac, 0x54, 0x03, 0x3f, 0x0c, 0xfb, 0x4f, 0xb2, 0x9f, 0x01, 0x65, 0x37, 0x4c,
-	0x4b, 0x6e, 0xf8, 0x1c, 0x16, 0xa5, 0x68, 0x24, 0x79, 0xe4, 0x66, 0xe2, 0xfc, 0xf1, 0x5c, 0xa5,
-	0x70, 0xc4, 0x1c, 0x73, 0xc1, 0x4e, 0xac, 0xd1, 0x33, 0x58, 0xe8, 0xc7, 0x4d, 0xb3, 0xff, 0x9e,
-	0x17, 0x36, 0x1f, 0x5e, 0x84, 0x77, 0x1f, 0xc2, 0x58, 0x97, 0x02, 0x79, 0x89, 0x6c, 0x40, 0xb6,
-	0xdf, 0x3e, 0x3b, 0x25, 0x5e, 0x64, 0x0d, 0x24, 0xcf, 0x30, 0xee, 0x1f, 0x5e, 0x48, 0x72, 0x99,
-	0x9a, 0x9d, 0xb0, 0x64, 0x0f, 0x83, 0x26, 0xe6, 0xe7, 0x9b, 0x20, 0x62, 0x05, 0x4f, 0x43, 0x3c,
-	0x31, 0x8b, 0x78, 0xc1, 0xd2, 0xd0, 0xaf, 0x40, 0xb3, 0x49, 0xdb, 0xb5, 0x02, 0x49, 0xb8, 0x1c,
-	0x13, 0xee, 0xd1, 0xc5, 0xd4, 0xda, 0xa7, 0x65, 0xa2, 0x2d, 0xda, 0x49, 0x00, 0x7a, 0x0f, 0x34,
-	0x9a, 0x4c, 0x12, 0xe5, 0x81, 0xca, 0xa4, 0x58, 0xa4, 0x70, 0xb9, 0x38, 0xb8, 0x0e, 0xf9, 0xae,
-	0x75, 0x4c, 0xcc, 0xd0, 0x79, 0x4d, 0x58, 0x14, 0xcc, 0x62, 0x95, 0x02, 0x9a, 0xce, 0x6b, 0x82,
-	0x6e, 0x00, 0xb0, 0xcd, 0xc8, 0x3f, 0x21, 0x1e, 0x8b, 0x72, 0x79, 0xcc, 0xd0, 0x5b, 0x14, 0x80,
-	0x1a, 0x50, 0x68, 0x5b, 0xae, 0x4b, 0x02, 0x7e, 0x83, 0x22, 0xbb, 0xc1, 0xc6, 0x45, 0x6e, 0x50,
-	0x65, 0x64, 0x4c, 0x78, 0x68, 0xf7, 0xbf, 0xd1, 0x4f, 0xe0, 0x1d, 0x72, 0xde, 0x25, 0x81, 0xc3,
-	0xf4, 0xec, 0x9a, 0xa1, 0x73, 0xec, 0x59, 0xd1, 0x59, 0x40, 0xc2, 0xb2, 0xcd, 0xc4, 0x5f, 0x91,
-	0xb7, 0x9b, 0xfd, 0x5d, 0xfd, 0x05, 0x2c, 0x24, 0x7d, 0x0d, 0x21, 0x58, 0xa8, 0x37, 0xcc, 0x1d,
-	0x63, 0xb7, 0x56, 0xaf, 0xb5, 0x6a, 0x8d, 0x3a, 0x0d, 0x40, 0x57, 0x60, 0x71, 0x6b, 0x6f, 0x2f,
-	0x01, 0x54, 0xd0, 0x32, 0x68, 0xbb, 0x87, 0x43, 0xd0, 0x14, 0x7a, 0x07, 0xae, 0x6c, 0xd7, 0xea,
-	0x3b, 0xb5, 0xfa, 0x67, 0x89, 0x8d, 0xb4, 0xfe, 0x11, 0x2c, 0x0e, 0xa9, 0x9f, 0xb2, 0x65, 0x47,
-	0x55, 0xf7, 0xb6, 0xf0, 0x56, 0x7c, 0xd6, 0x32, 0x68, 0xfc, 0x2c, 0x09, 0xaa, 0xe8, 0x36, 0x94,
-	0x12, 0x7e, 0x8b, 0x96, 0xa0, 0x54, 0x6f, 0x98, 0xd8, 0xd8, 0x35, 0xb0, 0x51, 0xaf, 0x1a, 0x42,
-	0xca, 0x2a, 0x25, 0x95, 0x80, 0x0a, 0x95, 0xa7, 0xde, 0xa8, 0x9b, 0xc3, 0x1b, 0x29, 0x7a, 0xcf,
-	0x21, 0x58, 0x5a, 0x7f, 0x0a, 0x4b, 0x23, 0xfe, 0x4b, 0x05, 0xa2, 0x52, 0x36, 0xaa, 0x87, 0xfb,
-	0x46, 0xbd, 0xc5, 0x24, 0xd2, 0xe6, 0xd0, 0x55, 0x58, 0x62, 0x62, 0x26, 0xc0, 0x8a, 0xbe, 0x0b,
-	0x30, 0x30, 0x11, 0x5a, 0x00, 0xa8, 0x37, 0xd8, 0xd9, 0x06, 0xa6, 0x12, 0x22, 0x58, 0xd8, 0xa9,
-	0x61, 0xa3, 0xda, 0xea, 0xc3, 0x98, 0x1a, 0xe3, 0x58, 0xdf, 0x87, 0xa6, 0xf4, 0x7f, 0xa5, 0x60,
-	0x9e, 0x47, 0xbd, 0x89, 0x89, 0x0e, 0x49, 0x89, 0x2e, 0x4e, 0xe5, 0x2b, 0x30, 0xdf, 0xb5, 0x02,
-	0xe2, 0x45, 0x22, 0xc1, 0x8b, 0xd5, 0xa0, 0x59, 0xc9, 0x5c, 0xb6, 0x59, 0xc9, 0x5e, 0xac, 0x59,
-	0xa1, 0xd2, 0xf4, 0xdf, 0x6c, 0x1e, 0xb3, 0x6f, 0x54, 0x86, 0x5c, 0xe8, 0x39, 0xdd, 0x2e, 0x89,
-	0xd8, 0x23, 0xcd, 0xe3, 0x78, 0x89, 0x9e, 0x42, 0x49, 0x7c, 0x8a, 0x32, 0x42, 0x9d, 0x7d, 0x4c,
-	0x51, 0x50, 0xf0, 0x3a, 0xe2, 0x23, 0x28, 0xc4, 0x1c, 0xa8, 0x98, 0xf9, 0xd9, 0xf4, 0x20, 0xf0,
-	0x0d, 0xcf, 0xd6, 0xff, 0xa4, 0x40, 0x66, 0xcf, 0xf1, 0x4e, 0xd0, 0xdd, 0x44, 0xb5, 0x90, 0x4c,
-	0xf2, 0x14, 0x41, 0x2e, 0x0c, 0x56, 0x01, 0xa4, 0x02, 0x29, 0xcd, 0x22, 0x97, 0x04, 0xd1, 0x3f,
-	0x15, 0xd9, 0x7b, 0x01, 0x60, 0xe0, 0xfa, 0xbc, 0x8b, 0xda, 0xab, 0x35, 0x5b, 0x9a, 0x42, 0xf3,
-	0x3a, 0xfd, 0x32, 0x6b, 0x2d, 0x63, 0x5f, 0x4b, 0xa1, 0x05, 0xc8, 0xd7, 0xf6, 0x0f, 0x1a, 0xb8,
-	0xb5, 0x55, 0x6f, 0x69, 0xdf, 0xe4, 0x3e, 0xcf, 0xa8, 0x8a, 0x96, 0xd2, 0xf7, 0x21, 0xdf, 0x2f,
-	0x2f, 0xd0, 0x35, 0x50, 0x03, 0xeb, 0x15, 0x0f, 0x87, 0xdc, 0xfc, 0xb9, 0xc0, 0x7a, 0xc5, 0x62,
-	0xe1, 0x8f, 0x20, 0xe3, 0x3a, 0xde, 0x49, 0x39, 0xc5, 0xf2, 0xfe, 0xd2, 0x88, 0xe8, 0x98, 0x6d,
-	0xeb, 0x7f, 0xcb, 0x40, 0x51, 0x2e, 0x39, 0xd0, 0xa6, 0xb8, 0xb2, 0xc2, 0xae, 0xbc, 0x3a, 0xb1,
-	0x36, 0x91, 0xaf, 0x7e, 0x0d, 0xd4, 0x6e, 0x20, 0x35, 0x07, 0x79, 0x9c, 0xeb, 0x06, 0xbc, 0x33,
-	0x78, 0x00, 0xd9, 0xf6, 0x0b, 0xc7, 0xb5, 0x99, 0x42, 0xa6, 0xd6, 0x3a, 0x1c, 0x0f, 0xbd, 0x0b,
-	0x8b, 0x5d, 0x3f, 0x8c, 0x4c, 0xb6, 0xe2, 0x2c, 0x79, 0xb1, 0x59, 0xa2, 0xe0, 0x2a, 0x85, 0x32,
-	0xc6, 0x34, 0xc0, 0x52, 0x3c, 0x86, 0x91, 0xe5, 0x3d, 0x07, 0x05, 0xb0, 0xcd, 0x5b, 0x50, 0x74,
-	0x7d, 0xff, 0xe4, 0xac, 0x6b, 0x3a, 0x9e, 0x4d, 0xce, 0x99, 0xdb, 0x95, 0x70, 0x81, 0xc3, 0x6a,
-	0x14, 0x84, 0x3e, 0x80, 0x15, 0x9b, 0x74, 0xac, 0x33, 0x57, 0x1c, 0x15, 0x10, 0xcf, 0x6c, 0xfb,
-	0x67, 0x1e, 0x77, 0xc6, 0x12, 0x5e, 0x16, 0xbb, 0x55, 0xb1, 0x59, 0xa5, 0x7b, 0xe8, 0x01, 0x2c,
-	0x5b, 0xb6, 0x6d, 0x76, 0x1c, 0xcf, 0x72, 0x4d, 0xd7, 0xa1, 0xe7, 0xb3, 0x18, 0x0e, 0xbc, 0x49,
-	0xb4, 0x6c, 0x7b, 0x97, 0x6e, 0xed, 0x39, 0x61, 0xc4, 0x63, 0x79, 0x6c, 0x86, 0xc2, 0x74, 0x33,
-	0xfc, 0x55, 0x11, 0xde, 0x91, 0x83, 0xf4, 0x76, 0xe3, 0x19, 0x77, 0x8b, 0xd6, 0x57, 0x07, 0x06,
-	0x77, 0x8b, 0x83, 0x2d, 0xbc, 0xb5, 0x6f, 0xb4, 0x0c, 0xcc, 0xdc, 0x02, 0x6a, 0x3b, 0x46, 0xbd,
-	0x55, 0xdb, 0xad, 0x19, 0x58, 0x4b, 0xd3, 0xf2, 0xaf, 0xda, 0xa8, 0xb7, 0x8c, 0x67, 0x2d, 0x2d,
-	0x43, 0x5b, 0x40, 0xe6, 0x59, 0x5b, 0x7b, 0xb5, 0x5f, 0x1a, 0x58, 0xcb, 0xa2, 0x1b, 0x70, 0xad,
-	0x4f, 0x6c, 0xee, 0x35, 0x1a, 0x5f, 0x1c, 0x1e, 0x98, 0xdb, 0x5f, 0x99, 0x0c, 0xa6, 0xcd, 0xd3,
-	0xa0, 0x38, 0x0c, 0xcc, 0xa1, 0x7b, 0x70, 0x67, 0x22, 0x8d, 0x49, 0x5b, 0x4e, 0x1a, 0xbb, 0xb7,
-	0x0e, 0xf7, 0x5a, 0x4d, 0x4d, 0xd5, 0xff, 0xa2, 0xc1, 0xf2, 0x48, 0x36, 0xa2, 0x7d, 0xa6, 0x05,
-	0x5a, 0x9b, 0xc2, 0x4d, 0xa9, 0x17, 0x57, 0xc6, 0x34, 0x5b, 0xe3, 0x88, 0x87, 0x81, 0xbc, 0x0f,
-	0x5a, 0x6c, 0x27, 0xa1, 0x68, 0x3b, 0xee, 0x09, 0xb9, 0x93, 0xbf, 0x3f, 0x9b, 0xef, 0x68, 0x5f,
-	0x78, 0x3a, 0xa1, 0x2f, 0xe4, 0xfe, 0xfa, 0x64, 0x36, 0xcb, 0xcb, 0xf5, 0x86, 0x1f, 0x43, 0x36,
-	0xf2, 0x23, 0xcb, 0x15, 0x91, 0xf3, 0xce, 0x6c, 0xfe, 0x2d, 0x8a, 0x8e, 0x39, 0x15, 0x7d, 0x1d,
-	0x1e, 0x39, 0x8f, 0x4c, 0xa9, 0x7c, 0x00, 0xfe, 0x3a, 0x28, 0xf8, 0x20, 0x2e, 0x21, 0x2a, 0x36,
-	0x14, 0x30, 0x71, 0xad, 0x88, 0xd8, 0xf4, 0xc6, 0x13, 0x93, 0xc4, 0x6d, 0x28, 0x05, 0x14, 0x2d,
-	0x51, 0x84, 0xe6, 0x71, 0x31, 0x06, 0x32, 0x97, 0x2c, 0x43, 0xce, 0x0f, 0x6c, 0xea, 0xd6, 0x62,
-	0x2e, 0x14, 0x2f, 0x2b, 0xdf, 0x2a, 0x34, 0xef, 0xb2, 0x63, 0x44, 0x36, 0xba, 0x07, 0xf3, 0xbc,
-	0x1e, 0x13, 0xa3, 0x85, 0xb1, 0x85, 0xba, 0x40, 0x19, 0x69, 0xa5, 0x52, 0x17, 0x6f, 0xa5, 0xee,
-	0x40, 0x26, 0x74, 0x22, 0x22, 0xac, 0x34, 0xf6, 0x14, 0x86, 0x20, 0xdd, 0x3c, 0x93, 0xb8, 0xf9,
-	0x48, 0x2f, 0x96, 0xbd, 0x54, 0x2f, 0x56, 0xf9, 0x7d, 0x16, 0x96, 0x92, 0xe6, 0x6a, 0x92, 0x68,
-	0xa2, 0x9e, 0x1b, 0x89, 0xdc, 0xc0, 0xbd, 0xf5, 0xc1, 0x6c, 0xd3, 0x27, 0x74, 0x2b, 0x27, 0x13,
-	0xb4, 0x2f, 0x0f, 0x55, 0xd2, 0x6f, 0xc7, 0x4f, 0x1a, 0xae, 0x1c, 0x42, 0x29, 0x51, 0x86, 0x8b,
-	0x39, 0xcd, 0xa5, 0x59, 0x26, 0xb9, 0xa0, 0x9f, 0x43, 0x41, 0x2a, 0xa1, 0x59, 0x35, 0xff, 0x16,
-	0x4c, 0x65, 0x1e, 0xe8, 0x33, 0x98, 0xe7, 0x85, 0x6d, 0x79, 0xfe, 0xed, 0xb8, 0x09, 0xf2, 0x11,
-	0xe7, 0xcb, 0x7d, 0x87, 0x3e, 0x5e, 0xbd, 0x94, 0xef, 0xa0, 0x03, 0xe0, 0x0f, 0x8c, 0xd8, 0x26,
-	0x8d, 0x41, 0x65, 0x60, 0x37, 0xb9, 0x7f, 0xe1, 0x9b, 0xd0, 0x27, 0x8d, 0x0b, 0xc1, 0x60, 0x51,
-	0xf9, 0x36, 0x05, 0x59, 0x16, 0x27, 0xd0, 0x1a, 0x55, 0xf9, 0xa0, 0x3b, 0xa1, 0x6e, 0x98, 0xc6,
-	0x32, 0x08, 0xe9, 0x50, 0x94, 0x14, 0x1a, 0xb2, 0x57, 0x97, 0xc6, 0x09, 0xd8, 0xd0, 0x04, 0x35,
-	0xcd, 0x30, 0xe4, 0x09, 0xea, 0x0f, 0x47, 0xfd, 0x85, 0xa2, 0x0c, 0x99, 0xbf, 0x0c, 0x39, 0xae,
-	0xec, 0x90, 0xbd, 0xae, 0x34, 0x8e, 0x97, 0xe8, 0xb7, 0x70, 0x4d, 0xd6, 0x40, 0x68, 0x1e, 0xf5,
-	0xcc, 0x38, 0xe6, 0x08, 0xc3, 0x56, 0x2f, 0x18, 0x19, 0x65, 0xa5, 0x84, 0xdb, 0x3d, 0x2c, 0xb8,
-	0xf0, 0x10, 0xbc, 0x12, 0x8c, 0xdd, 0xac, 0xd4, 0xe0, 0xfa, 0x14, 0xb2, 0x31, 0x53, 0x82, 0x65,
-	0x79, 0x4a, 0x90, 0x96, 0x47, 0x0d, 0xaf, 0x46, 0xd2, 0xdf, 0x24, 0x1e, 0xb5, 0xe4, 0xa4, 0xe1,
-	0xd1, 0x65, 0xb3, 0x60, 0x93, 0x44, 0xf2, 0xc1, 0xdf, 0xc7, 0xc1, 0x8c, 0xbe, 0x0b, 0xcb, 0x89,
-	0x16, 0x6a, 0xd6, 0x9c, 0x64, 0x30, 0x0a, 0x48, 0xc9, 0xa3, 0x00, 0xfd, 0xcf, 0xf3, 0x80, 0x86,
-	0x18, 0xd1, 0x9a, 0x63, 0x07, 0xd4, 0xd8, 0x05, 0x45, 0xad, 0x31, 0x34, 0x27, 0x1e, 0x21, 0xe9,
-	0x83, 0x70, 0x9f, 0x12, 0x3d, 0x4d, 0x96, 0x15, 0x77, 0x67, 0xb1, 0x18, 0x2d, 0x2a, 0x4e, 0xa6,
-	0x16, 0x15, 0x8f, 0x67, 0xca, 0x74, 0x99, 0x92, 0xa2, 0xf2, 0x4d, 0x0a, 0xd4, 0x98, 0xc9, 0xc4,
-	0x0c, 0x74, 0x57, 0x34, 0x60, 0xd3, 0x73, 0x2c, 0x6f, 0xcc, 0x3e, 0x80, 0x7c, 0x7f, 0x42, 0x30,
-	0x63, 0xbe, 0x39, 0x40, 0x64, 0x27, 0xf4, 0xba, 0xf1, 0x50, 0x73, 0xf2, 0x09, 0xbd, 0x2e, 0x41,
-	0x8f, 0xa1, 0xc0, 0xae, 0x61, 0xb9, 0xce, 0x6b, 0x36, 0xe6, 0x99, 0x1a, 0x7b, 0x25, 0x54, 0xf4,
-	0xa1, 0xc8, 0xa4, 0xc4, 0x36, 0x8f, 0x7a, 0xac, 0xae, 0x9f, 0x22, 0x9c, 0xc0, 0xdc, 0xee, 0x7d,
-	0xd7, 0x90, 0xfd, 0x79, 0x46, 0xcd, 0x69, 0xea, 0xf7, 0xf2, 0xc9, 0x6d, 0x7e, 0x9d, 0x82, 0xc2,
-	0x33, 0x4c, 0x3a, 0x4d, 0x12, 0xbc, 0x74, 0xda, 0x04, 0x35, 0xa0, 0x20, 0x8d, 0x35, 0xd1, 0xcd,
-	0x19, 0x7f, 0xa1, 0x2a, 0x37, 0xa6, 0x4e, 0x44, 0xf5, 0x39, 0xf4, 0x1c, 0x16, 0x87, 0xa2, 0x17,
-	0xba, 0x7d, 0x81, 0x61, 0x55, 0xe5, 0xd6, 0xcc, 0x00, 0xa8, 0xcf, 0xd1, 0xca, 0x24, 0xf1, 0x40,
-	0xd0, 0xad, 0x69, 0x8f, 0x87, 0x33, 0xbe, 0x39, 0xe3, 0x7d, 0xe9, 0x73, 0xdb, 0x8f, 0xfe, 0xf1,
-	0x66, 0x55, 0xf9, 0xe7, 0x9b, 0x55, 0xe5, 0xdf, 0x6f, 0x56, 0x95, 0x3f, 0xfe, 0x67, 0x75, 0x0e,
-	0x6e, 0xb6, 0xfd, 0xd3, 0x8d, 0x63, 0xdf, 0x3f, 0x76, 0xc9, 0x86, 0x4d, 0x5e, 0x46, 0xbe, 0xef,
-	0x86, 0x32, 0x9f, 0x03, 0xe5, 0x68, 0x9e, 0x7d, 0x3c, 0xfa, 0x7f, 0x00, 0x00, 0x00, 0xff, 0xff,
-	0x2a, 0xcb, 0x1c, 0x47, 0x70, 0x1e, 0x00, 0x00,
+	// 2358 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x59, 0x4d, 0x73, 0xe3, 0x48,
+	0xf9, 0x8f, 0x6c, 0x39, 0x96, 0x1f, 0xc5, 0x89, 0xd2, 0x93, 0xcd, 0x6a, 0xbc, 0xff, 0xcd, 0x64,
+	0xb4, 0x7f, 0x76, 0x32, 0x2f, 0x9b, 0xa9, 0xf5, 0x2c, 0x30, 0xb5, 0xb0, 0xb3, 0x24, 0xb1, 0xb2,
+	0x38, 0x9b, 0xd8, 0xa1, 0xed, 0x59, 0x66, 0x99, 0x2a, 0x84, 0xc6, 0xea, 0x64, 0x54, 0x51, 0x24,
+	0xaf, 0xa4, 0xcc, 0xc4, 0x73, 0xe0, 0xc6, 0x17, 0xe0, 0x04, 0xdf, 0x80, 0x0b, 0x07, 0x2e, 0x70,
+	0xa0, 0x8a, 0x0b, 0x17, 0x2e, 0x54, 0xf1, 0x11, 0xa8, 0xe1, 0xc0, 0x8d, 0xe2, 0x48, 0x51, 0x45,
+	0x15, 0xd5, 0xdd, 0x92, 0xdc, 0xf2, 0x5b, 0x92, 0xe1, 0xb4, 0x37, 0xf7, 0xaf, 0x9f, 0x97, 0xee,
+	0xe7, 0x79, 0xfa, 0x79, 0x91, 0x61, 0xf5, 0x64, 0x10, 0x3f, 0x27, 0xf7, 0xfb, 0x61, 0x10, 0x07,
+	0xf7, 0xcf, 0x43, 0x72, 0xb4, 0xc9, 0x7e, 0x22, 0x95, 0xe1, 0x7c, 0x51, 0xd3, 0x45, 0xa2, 0x5e,
+	0x70, 0x7a, 0x1a, 0xf8, 0x7c, 0xc7, 0xf8, 0x95, 0x04, 0xca, 0x7e, 0xd0, 0xb3, 0x63, 0x37, 0xf0,
+	0xd1, 0x2a, 0xcc, 0xc7, 0x6e, 0xef, 0x84, 0xc4, 0xba, 0xb4, 0x2e, 0x6d, 0x54, 0x70, 0xb2, 0x42,
+	0x9b, 0x20, 0x9f, 0xb8, 0xbe, 0xa3, 0x17, 0xd6, 0xa5, 0x8d, 0xc5, 0x7a, 0x6d, 0x53, 0x10, 0xbd,
+	0x99, 0x32, 0x6f, 0x7e, 0xee, 0xfa, 0x0e, 0x66, 0x74, 0xe8, 0x1e, 0xc8, 0x51, 0xdf, 0xf6, 0xf5,
+	0xd2, 0xba, 0xb4, 0xa1, 0xd6, 0xf5, 0x1c, 0x7d, 0xa2, 0xbd, 0xd3, 0xb7, 0x7d, 0xcc, 0xa8, 0x8c,
+	0x1a, 0xc8, 0x94, 0x17, 0x29, 0x20, 0xef, 0x36, 0xf7, 0x4d, 0x6d, 0x8e, 0xfe, 0xea, 0x1c, 0x6e,
+	0xb5, 0x34, 0x69, 0x4f, 0x56, 0x8a, 0x9a, 0xbc, 0x27, 0x2b, 0xb2, 0x56, 0x32, 0x7e, 0x5b, 0x04,
+	0xd4, 0x20, 0xbd, 0x20, 0x64, 0xfa, 0x22, 0x4c, 0xbe, 0x3a, 0x23, 0x51, 0x8c, 0x3e, 0x04, 0xc5,
+	0x4b, 0xce, 0xc0, 0x8e, 0xad, 0xd6, 0xdf, 0x9a, 0x78, 0x40, 0x9c, 0x91, 0xa1, 0x9b, 0xb0, 0xe0,
+	0xb8, 0x61, 0x3c, 0xb0, 0x9e, 0x9d, 0x1d, 0x1d, 0x91, 0x90, 0xdd, 0x6b, 0x01, 0xab, 0x0c, 0xdb,
+	0x66, 0x10, 0xba, 0x01, 0x6a, 0x14, 0x9c, 0x85, 0x3d, 0x62, 0xc5, 0xe4, 0x3c, 0xd6, 0x8b, 0xeb,
+	0xd2, 0x86, 0x82, 0x81, 0x43, 0x5d, 0x72, 0x1e, 0xa3, 0x35, 0x80, 0x90, 0x1c, 0x91, 0x90, 0xf8,
+	0x3d, 0x12, 0xe9, 0x32, 0xdf, 0x1f, 0x22, 0xd4, 0x96, 0x47, 0xae, 0x17, 0x93, 0x50, 0x2f, 0xad,
+	0x17, 0xa9, 0x2d, 0xf9, 0x0a, 0x7d, 0x00, 0x28, 0xb6, 0xc3, 0x63, 0x12, 0x5b, 0x0e, 0x39, 0x72,
+	0x7d, 0x97, 0xdd, 0x45, 0x9f, 0x67, 0xfc, 0xcb, 0x7c, 0xa7, 0x31, 0xdc, 0x40, 0x77, 0x61, 0x99,
+	0x9c, 0xc7, 0xc4, 0x77, 0x22, 0x2b, 0x78, 0x41, 0xc2, 0xd0, 0x75, 0x48, 0xa4, 0x97, 0x19, 0xb5,
+	0x96, 0x6c, 0xb4, 0x53, 0x1c, 0xad, 0x83, 0xea, 0xb8, 0xf6, 0xb1, 0x1f, 0x44, 0xb1, 0xdb, 0x8b,
+	0x74, 0x85, 0x91, 0x89, 0x10, 0x32, 0xa1, 0x42, 0x6d, 0x6e, 0x31, 0x77, 0x02, 0x73, 0xe7, 0x46,
+	0xce, 0x5a, 0xe3, 0x06, 0x66, 0xae, 0x62, 0xce, 0x55, 0xa2, 0xe4, 0x97, 0x71, 0x0f, 0x94, 0x14,
+	0x45, 0x4b, 0xa0, 0xfe, 0xb0, 0xd9, 0xfd, 0x7e, 0xb3, 0x65, 0x31, 0x9f, 0xcd, 0x51, 0x60, 0x0b,
+	0xb7, 0x1f, 0xb7, 0x1a, 0x1c, 0x90, 0x8c, 0xdf, 0x03, 0x68, 0x39, 0xb9, 0x7d, 0x6f, 0xf0, 0x26,
+	0x6e, 0x1b, 0xf1, 0x09, 0xf7, 0x9a, 0xe8, 0x93, 0x1a, 0x28, 0xc4, 0xef, 0x05, 0x8e, 0xeb, 0x1f,
+	0x33, 0x8f, 0x55, 0x70, 0xb6, 0xa6, 0x37, 0xcf, 0xbc, 0xa3, 0xcb, 0xeb, 0xc5, 0x0d, 0xb5, 0x7e,
+	0x6b, 0xfa, 0xcd, 0xfb, 0xde, 0x60, 0x13, 0xa7, 0xe4, 0x78, 0xc8, 0x89, 0x1e, 0x01, 0x0c, 0xed,
+	0xc9, 0x5c, 0xab, 0xd6, 0xd7, 0x26, 0x05, 0x78, 0x23, 0xa3, 0xc2, 0x02, 0x07, 0x7a, 0x04, 0x25,
+	0x3f, 0xa0, 0x3e, 0x5c, 0x62, 0xac, 0x1b, 0xb3, 0x8f, 0xd0, 0xa2, 0xa4, 0xa6, 0x1f, 0x87, 0x03,
+	0xcc, 0xd9, 0x90, 0x0b, 0x2b, 0xc3, 0xb8, 0xb1, 0x52, 0xd3, 0x44, 0xba, 0xc6, 0xc4, 0x7d, 0x6b,
+	0xb6, 0xb8, 0x61, 0x60, 0xa5, 0xd6, 0x4d, 0x84, 0x5f, 0x73, 0xc6, 0x77, 0xd0, 0x4f, 0x26, 0x85,
+	0xde, 0x32, 0xd3, 0xf3, 0x60, 0xb6, 0x1e, 0x73, 0x24, 0x30, 0xb9, 0x92, 0xb1, 0x78, 0xad, 0xfd,
+	0x46, 0x82, 0x4a, 0x66, 0x65, 0xf4, 0x1e, 0x54, 0x93, 0x97, 0x91, 0x24, 0xa1, 0x02, 0x73, 0xe1,
+	0x02, 0x07, 0xbb, 0x3c, 0x15, 0xa1, 0x24, 0x15, 0x71, 0xf7, 0xf2, 0x74, 0x73, 0x17, 0x96, 0xc7,
+	0x9e, 0x14, 0x7b, 0x91, 0x15, 0xac, 0x8d, 0xbe, 0xa8, 0xab, 0xe5, 0xa6, 0x3d, 0x59, 0x91, 0xb4,
+	0xc2, 0x9e, 0xac, 0x80, 0xa6, 0xee, 0xc9, 0x8a, 0xaa, 0x2d, 0xd4, 0xfe, 0x2d, 0x81, 0x92, 0xde,
+	0x80, 0x25, 0x4c, 0xa6, 0x20, 0x4b, 0x98, 0x6c, 0x85, 0x3e, 0xcd, 0x25, 0xcc, 0xbb, 0xb3, 0xad,
+	0x95, 0x4a, 0x13, 0x33, 0xe8, 0x23, 0xa8, 0x9e, 0xda, 0xe1, 0x09, 0x71, 0x2c, 0x1e, 0xde, 0xec,
+	0x3a, 0x6a, 0xfd, 0x7a, 0x4e, 0xd2, 0x01, 0xa3, 0xe8, 0x30, 0x02, 0xbc, 0x70, 0x2a, 0xac, 0x26,
+	0x9b, 0xa4, 0x34, 0xd9, 0x24, 0x86, 0x91, 0x24, 0xe0, 0x2a, 0x54, 0xda, 0x5f, 0x98, 0x18, 0x37,
+	0x1b, 0x66, 0x47, 0x9b, 0x43, 0x2a, 0x94, 0xcd, 0x27, 0x5d, 0xb3, 0xd5, 0xe8, 0xa4, 0x89, 0xb8,
+	0xd6, 0x86, 0xca, 0x30, 0xdb, 0x6c, 0x83, 0x92, 0xc6, 0x85, 0x2e, 0xb1, 0xb0, 0x78, 0xff, 0x72,
+	0x17, 0xc5, 0x19, 0x5f, 0xed, 0x0b, 0x80, 0x61, 0x8c, 0x23, 0x0d, 0x8a, 0x27, 0x64, 0x90, 0xd8,
+	0x92, 0xfe, 0x44, 0x75, 0x28, 0xbd, 0xb0, 0xbd, 0x33, 0xc2, 0x2c, 0xa9, 0xd6, 0xff, 0x6f, 0x92,
+	0xbb, 0xa8, 0x80, 0xa6, 0x7f, 0x14, 0x60, 0x4e, 0xfa, 0x71, 0xe1, 0xa1, 0x54, 0x7b, 0x0a, 0xfa,
+	0xb4, 0x60, 0x9f, 0xa0, 0xe5, 0x76, 0x5e, 0xcb, 0xb5, 0x9c, 0x96, 0x2d, 0xbf, 0xf7, 0x3c, 0x08,
+	0x45, 0xe1, 0x1e, 0xbc, 0x35, 0x31, 0xc2, 0x27, 0x48, 0xfe, 0x24, 0x2f, 0xf9, 0xd6, 0xe5, 0x0c,
+	0x14, 0x09, 0xda, 0x8c, 0x3f, 0x97, 0x61, 0x75, 0x27, 0x0c, 0xa2, 0x28, 0x7b, 0x29, 0x59, 0xe9,
+	0x13, 0xeb, 0x75, 0x51, 0xa8, 0xd7, 0x4f, 0x61, 0x49, 0x48, 0x12, 0x42, 0x24, 0xd6, 0x73, 0xfa,
+	0x27, 0x4b, 0x15, 0xb2, 0x04, 0x0b, 0xc8, 0x45, 0x27, 0xb7, 0x46, 0x4f, 0x60, 0x31, 0x4b, 0x87,
+	0x56, 0xf6, 0x16, 0x17, 0xeb, 0x1f, 0x5e, 0x46, 0x76, 0x86, 0x30, 0xd1, 0xd5, 0x50, 0x5c, 0x4e,
+	0x2d, 0x99, 0x37, 0x40, 0xb5, 0x99, 0x13, 0x78, 0xde, 0xe7, 0xb5, 0x12, 0x38, 0xc4, 0xf2, 0xfe,
+	0x8f, 0x41, 0x73, 0x48, 0xcf, 0xb3, 0xb9, 0x31, 0xf9, 0xa1, 0xca, 0xec, 0x50, 0x0f, 0x2e, 0x77,
+	0xe1, 0x8c, 0x97, 0x1d, 0x6b, 0xc9, 0xc9, 0x03, 0xe8, 0x36, 0x68, 0x34, 0xfb, 0xe6, 0x2a, 0x36,
+	0x2f, 0xae, 0x4b, 0x14, 0x17, 0xeb, 0xf5, 0x3b, 0x50, 0xe9, 0xdb, 0xc7, 0xc4, 0x8a, 0xdc, 0x57,
+	0x84, 0x15, 0xd8, 0x12, 0x56, 0x28, 0xd0, 0x71, 0x5f, 0x11, 0xf4, 0x2e, 0x00, 0xdb, 0x8c, 0x83,
+	0x13, 0xe2, 0xeb, 0x2a, 0x0b, 0x13, 0x46, 0xde, 0xa5, 0x00, 0x6a, 0x83, 0xda, 0xb3, 0x3d, 0x8f,
+	0x84, 0xfc, 0x06, 0x0b, 0xec, 0x06, 0x9b, 0x97, 0xb9, 0xc1, 0x0e, 0x63, 0x63, 0x87, 0x87, 0x5e,
+	0xf6, 0x1b, 0x7d, 0x1b, 0xde, 0x26, 0xe7, 0x7d, 0x12, 0xba, 0xa7, 0xc4, 0x8f, 0x6d, 0xcf, 0x8a,
+	0xdc, 0x63, 0xdf, 0x8e, 0xcf, 0x42, 0x12, 0xe9, 0x0e, 0x3b, 0xfe, 0xaa, 0xb8, 0xdd, 0xc9, 0x76,
+	0x8d, 0xe7, 0xb0, 0x98, 0x8f, 0x02, 0x84, 0x60, 0xb1, 0xd5, 0xb6, 0x1a, 0xe6, 0x6e, 0xb3, 0xd5,
+	0xec, 0x36, 0xdb, 0x2d, 0x9a, 0x20, 0xae, 0xc1, 0xd2, 0xd6, 0xfe, 0x7e, 0x0e, 0x94, 0xd0, 0x0a,
+	0x68, 0xbb, 0x8f, 0x47, 0xd0, 0x02, 0x7a, 0x1b, 0xae, 0x6d, 0x37, 0x5b, 0x8d, 0x66, 0xeb, 0xb3,
+	0xdc, 0x46, 0xd1, 0xf8, 0x2e, 0x2c, 0x8d, 0x98, 0x9f, 0x8a, 0x65, 0xaa, 0x76, 0xf6, 0xb7, 0xf0,
+	0x56, 0xaa, 0x6b, 0x05, 0x34, 0xae, 0x4b, 0x40, 0x25, 0xc3, 0x81, 0x6a, 0x2e, 0xa2, 0xd0, 0x32,
+	0x54, 0x5b, 0x6d, 0x0b, 0x9b, 0xbb, 0x26, 0x36, 0x5b, 0x3b, 0x66, 0x72, 0xca, 0x1d, 0xca, 0x2a,
+	0x80, 0x12, 0x3d, 0x4f, 0xab, 0xdd, 0xb2, 0x46, 0x37, 0x0a, 0xf4, 0x9e, 0x23, 0x58, 0xd1, 0xd8,
+	0x05, 0x18, 0x1a, 0x18, 0x2d, 0x02, 0xb4, 0xda, 0x8c, 0xd3, 0xc4, 0x54, 0x3e, 0x82, 0xc5, 0x46,
+	0x13, 0x9b, 0x3b, 0xdd, 0x0c, 0x63, 0x46, 0x48, 0x33, 0x69, 0x86, 0x16, 0x92, 0x36, 0xf6, 0x3f,
+	0x12, 0xcc, 0xf3, 0x9c, 0x32, 0xb5, 0xdf, 0x46, 0x42, 0xf9, 0x48, 0x8b, 0xdc, 0x2a, 0xcc, 0xf7,
+	0xed, 0x90, 0xf8, 0x71, 0x52, 0xfa, 0x92, 0x15, 0xa5, 0xcd, 0x5e, 0x45, 0x05, 0xb3, 0xdf, 0x48,
+	0x87, 0x72, 0xe4, 0xbb, 0xfd, 0x3e, 0x89, 0xd9, 0x33, 0xa8, 0xe0, 0x74, 0x99, 0x55, 0x3f, 0xb8,
+	0x4c, 0xf5, 0x43, 0xdf, 0x81, 0x85, 0x84, 0xd1, 0x62, 0x5c, 0xea, 0x05, 0x5c, 0x6a, 0x42, 0xdd,
+	0xe1, 0xa5, 0x53, 0xd6, 0x4a, 0x7b, 0xb2, 0x52, 0xd2, 0xe6, 0xf7, 0x64, 0x45, 0xd1, 0x2a, 0x7b,
+	0xb2, 0x52, 0xd1, 0xc0, 0xf8, 0xa5, 0x04, 0xf2, 0xbe, 0xeb, 0x9f, 0xa0, 0x3b, 0xb9, 0x22, 0xb9,
+	0x9a, 0xef, 0xfe, 0x5c, 0xff, 0x44, 0xac, 0x87, 0x6b, 0x00, 0x42, 0x21, 0x2b, 0xb2, 0xf4, 0x20,
+	0x20, 0xc6, 0xa7, 0x49, 0x09, 0x5b, 0x04, 0x18, 0xc6, 0x17, 0x9f, 0x24, 0xf6, 0x9b, 0x9d, 0xae,
+	0x26, 0xd1, 0xe2, 0x46, 0x7f, 0x59, 0xcd, 0xae, 0x79, 0xa0, 0x15, 0xd0, 0x22, 0x54, 0x9a, 0x07,
+	0x87, 0x6d, 0xdc, 0xdd, 0x6a, 0x75, 0xb5, 0xbf, 0x97, 0x79, 0xa1, 0x37, 0x0e, 0xa0, 0x72, 0x18,
+	0xba, 0x7e, 0x6c, 0x3f, 0xf3, 0x08, 0xba, 0x0e, 0x4a, 0x68, 0xbf, 0xe4, 0x39, 0x87, 0xfb, 0xa7,
+	0x1c, 0xda, 0x2f, 0x59, 0xc2, 0xf9, 0x06, 0xc8, 0x9e, 0xeb, 0x9f, 0xe8, 0x05, 0x56, 0xf6, 0x96,
+	0xc7, 0x8e, 0x8e, 0xd9, 0xb6, 0xf1, 0x07, 0x19, 0x16, 0xc4, 0x22, 0x8d, 0xea, 0xc9, 0x95, 0x25,
+	0x76, 0xe5, 0xb5, 0xa9, 0xd5, 0x5c, 0xbc, 0xfa, 0x75, 0x50, 0xfa, 0xa1, 0xd0, 0xf2, 0x56, 0x70,
+	0xb9, 0x1f, 0xf2, 0x7e, 0xf7, 0x3e, 0x94, 0x7a, 0xcf, 0x5d, 0xcf, 0x61, 0x06, 0x99, 0xd9, 0x1d,
+	0x70, 0x3a, 0xf4, 0x3e, 0x2c, 0xf5, 0x83, 0x28, 0xb6, 0xd8, 0x8a, 0x8b, 0xe4, 0x7d, 0x52, 0x95,
+	0xc2, 0x3b, 0x14, 0x65, 0x82, 0x69, 0x16, 0xa3, 0x74, 0x8c, 0x82, 0xb7, 0x0d, 0x0a, 0x05, 0xd8,
+	0xe6, 0x4d, 0x58, 0xf0, 0x82, 0xe0, 0xe4, 0xac, 0x6f, 0xb9, 0xbe, 0x43, 0xce, 0x59, 0xe4, 0x55,
+	0xb1, 0xca, 0xb1, 0x26, 0x85, 0xd0, 0x47, 0xb0, 0xea, 0x90, 0x23, 0xfb, 0xcc, 0x4b, 0x54, 0x85,
+	0xc4, 0xb7, 0x7a, 0xc1, 0x99, 0xcf, 0xe3, 0xb1, 0x8a, 0x57, 0x92, 0xdd, 0x9d, 0x64, 0x73, 0x87,
+	0xee, 0xa1, 0xfb, 0xb0, 0x62, 0x3b, 0x8e, 0x75, 0xe4, 0xfa, 0xb6, 0x67, 0x79, 0x2e, 0xd5, 0xcf,
+	0x12, 0x25, 0xf0, 0xe1, 0xc8, 0x76, 0x9c, 0x5d, 0xba, 0xb5, 0xef, 0x46, 0x31, 0x4f, 0x98, 0xa9,
+	0x1b, 0xd4, 0xd9, 0x6e, 0xf8, 0x9d, 0x94, 0x44, 0x47, 0x19, 0x8a, 0xdb, 0xed, 0x27, 0x3c, 0x2c,
+	0xba, 0x5f, 0x1e, 0x9a, 0x3c, 0x2c, 0x0e, 0xb7, 0xf0, 0xd6, 0x81, 0xd9, 0x35, 0x31, 0x0b, 0x0b,
+	0x68, 0x36, 0xcc, 0x56, 0xb7, 0xb9, 0xdb, 0x34, 0xb1, 0x56, 0xa4, 0x3d, 0xd0, 0x4e, 0xbb, 0xd5,
+	0x35, 0x9f, 0x74, 0x35, 0x99, 0x0e, 0x36, 0x2c, 0xb2, 0xb6, 0xf6, 0x9b, 0x3f, 0x32, 0xb1, 0x56,
+	0x42, 0xef, 0xc2, 0xf5, 0x8c, 0xd9, 0xda, 0x6f, 0xb7, 0x3f, 0x7f, 0x7c, 0x68, 0x6d, 0x7f, 0x69,
+	0x31, 0x4c, 0x9b, 0xa7, 0x99, 0x67, 0x14, 0x2c, 0xa3, 0xbb, 0x70, 0x6b, 0x2a, 0x8f, 0x45, 0x07,
+	0x29, 0x9a, 0x20, 0xb7, 0x1e, 0xef, 0x77, 0x3b, 0x9a, 0x62, 0xfc, 0x73, 0x11, 0x56, 0xc6, 0x52,
+	0x3e, 0x9d, 0x9e, 0x6c, 0xd0, 0x7a, 0x14, 0xb7, 0x84, 0x19, 0x54, 0x9a, 0x30, 0x02, 0x4c, 0x62,
+	0x1e, 0x05, 0x79, 0x77, 0xbe, 0xd4, 0xcb, 0xa3, 0x68, 0x3b, 0x9d, 0x54, 0x78, 0x90, 0xdf, 0xbb,
+	0x58, 0xee, 0xf8, 0xb4, 0x72, 0x3a, 0x65, 0x5a, 0xe1, 0xf1, 0xfa, 0xf1, 0xc5, 0x22, 0xaf, 0x36,
+	0xb1, 0x7c, 0x02, 0xa5, 0x38, 0x88, 0x6d, 0x2f, 0x69, 0xee, 0x6f, 0x5d, 0x2c, 0xbf, 0x4b, 0xc9,
+	0x31, 0xe7, 0xa2, 0xaf, 0xc3, 0x27, 0xe7, 0xb1, 0x25, 0xd4, 0x68, 0xe0, 0xaf, 0x83, 0xc2, 0x87,
+	0x69, 0x9d, 0xae, 0x39, 0xa0, 0x62, 0xe2, 0xd9, 0x31, 0x71, 0xe8, 0x8d, 0xa7, 0x66, 0xf1, 0xf7,
+	0xa0, 0x1a, 0x52, 0xb2, 0x5c, 0x0f, 0x56, 0xc1, 0x0b, 0x29, 0xc8, 0x42, 0x52, 0x87, 0x72, 0x10,
+	0x3a, 0x34, 0xac, 0x59, 0x5e, 0x2f, 0xe1, 0x74, 0x59, 0xfb, 0xa3, 0x44, 0x8b, 0x1b, 0x53, 0x93,
+	0x94, 0x8b, 0xbb, 0x30, 0xcf, 0x9b, 0x9e, 0x64, 0x60, 0x9e, 0xd8, 0xa7, 0x26, 0x24, 0xe8, 0x16,
+	0xc8, 0x91, 0x1b, 0x93, 0xc4, 0xd4, 0x13, 0x49, 0x19, 0x81, 0x70, 0x7c, 0x39, 0x77, 0xfc, 0xb1,
+	0x11, 0xa4, 0x74, 0xa5, 0x11, 0x64, 0x4f, 0x56, 0x0a, 0x5a, 0xb1, 0xf6, 0x33, 0x19, 0x96, 0xf3,
+	0x96, 0xef, 0x90, 0x78, 0xaa, 0xc9, 0xda, 0xb9, 0x34, 0xcf, 0x03, 0xef, 0xfe, 0xc5, 0x5e, 0xcc,
+	0x99, 0x49, 0xac, 0x0b, 0xe8, 0x40, 0x9c, 0xfa, 0x8b, 0x6f, 0x26, 0x4f, 0x98, 0xfe, 0x7f, 0x00,
+	0xaa, 0xd0, 0x1b, 0x26, 0xe3, 0xff, 0x95, 0x05, 0x8a, 0x32, 0xd0, 0x67, 0x30, 0xcf, 0x3b, 0x36,
+	0x7d, 0xfe, 0xcd, 0xa4, 0x25, 0xec, 0xe3, 0xfe, 0x52, 0xae, 0x36, 0x32, 0x1e, 0x02, 0x8f, 0x4c,
+	0xe2, 0x58, 0xf4, 0xf1, 0xea, 0xc0, 0x8e, 0xf3, 0xc1, 0xa5, 0x8f, 0x43, 0xdf, 0x02, 0x56, 0xc3,
+	0xe1, 0x22, 0xeb, 0x00, 0xca, 0x9a, 0x52, 0xfb, 0x57, 0x01, 0x4a, 0xec, 0xb1, 0xb1, 0x8f, 0x54,
+	0x42, 0x1f, 0x4d, 0x03, 0xa0, 0x88, 0x45, 0x08, 0x19, 0xb0, 0x20, 0x58, 0x28, 0x62, 0xef, 0xa6,
+	0x88, 0x73, 0xd8, 0xc8, 0xe7, 0xb7, 0x22, 0xa3, 0x10, 0x3f, 0xbf, 0xfd, 0x3f, 0x54, 0x9d, 0xa0,
+	0x77, 0xc6, 0x3a, 0xdb, 0xec, 0x7b, 0x40, 0x11, 0xe7, 0x41, 0xfa, 0xfa, 0xb8, 0xf5, 0x22, 0x16,
+	0xdd, 0x45, 0x9c, 0x2e, 0xd1, 0x4f, 0xe1, 0xba, 0x68, 0x8d, 0xc8, 0x7a, 0x36, 0xb0, 0xd2, 0x87,
+	0x9b, 0x78, 0x6a, 0xe7, 0x92, 0xe9, 0x45, 0x34, 0x50, 0xb4, 0x3d, 0xc0, 0x89, 0x14, 0x9e, 0xc7,
+	0x56, 0xc3, 0x89, 0x9b, 0xb5, 0x26, 0xbc, 0x33, 0x83, 0x6d, 0xc2, 0xa4, 0xb9, 0x22, 0x4e, 0x9a,
+	0x45, 0x71, 0x5c, 0x7d, 0x39, 0x56, 0x43, 0xa6, 0xc9, 0x68, 0xe6, 0xa7, 0xd5, 0x07, 0x57, 0x2d,
+	0x25, 0x1d, 0x12, 0x8b, 0x8a, 0xbf, 0x8e, 0xc3, 0xbd, 0xf1, 0x15, 0xac, 0x34, 0xc4, 0x18, 0xb9,
+	0x68, 0xd6, 0x1e, 0x0e, 0xad, 0x85, 0xdc, 0xd0, 0x7a, 0x1b, 0x34, 0xd7, 0xef, 0x79, 0x67, 0x0e,
+	0xc9, 0x5a, 0xa0, 0xe4, 0x2b, 0xf2, 0x52, 0x82, 0xa7, 0xcd, 0x8f, 0xf1, 0x8f, 0x79, 0x40, 0x23,
+	0x3a, 0x69, 0x8d, 0x6f, 0x80, 0x92, 0x46, 0x6b, 0x52, 0xdb, 0x47, 0xbe, 0x16, 0x8e, 0xb1, 0x64,
+	0x10, 0xce, 0x38, 0xd1, 0xf7, 0xf2, 0x65, 0xfc, 0xce, 0x45, 0x22, 0xc6, 0x8b, 0xf8, 0xc9, 0xcc,
+	0x22, 0xfe, 0xf0, 0xc2, 0x33, 0x5d, 0xa5, 0x84, 0xd7, 0x7e, 0x5d, 0x04, 0x25, 0x15, 0x32, 0xb5,
+	0x4c, 0xdc, 0x49, 0x66, 0x1e, 0xee, 0xd1, 0xfc, 0xe4, 0x90, 0xf5, 0xef, 0xc9, 0x2c, 0xf4, 0x11,
+	0x54, 0xb2, 0xb1, 0x97, 0x39, 0x60, 0x3a, 0xc3, 0x90, 0x90, 0x69, 0x18, 0xf4, 0xd3, 0xcf, 0x6e,
+	0xd3, 0x35, 0x0c, 0xfa, 0x04, 0x3d, 0x04, 0x95, 0x5d, 0xc3, 0xf6, 0xdc, 0x57, 0xec, 0xdb, 0xc5,
+	0x2c, 0x16, 0x91, 0x14, 0x7d, 0x33, 0x29, 0x77, 0xc4, 0xb1, 0x9e, 0x0d, 0x58, 0x1f, 0x3d, 0xe3,
+	0x70, 0x09, 0xe5, 0xf6, 0xe0, 0x7f, 0xce, 0xf4, 0x0d, 0x50, 0xb2, 0x90, 0xac, 0x5c, 0x35, 0xb0,
+	0x52, 0xce, 0x24, 0xaf, 0x7f, 0x1d, 0xdf, 0x78, 0xfd, 0xe7, 0x05, 0x50, 0x9f, 0x60, 0x72, 0xd4,
+	0x21, 0xe1, 0x0b, 0xb7, 0x47, 0x50, 0x1b, 0x54, 0xe1, 0x5b, 0x1c, 0xba, 0x71, 0xc1, 0x3f, 0x22,
+	0xb5, 0x77, 0x67, 0x7e, 0xc6, 0x33, 0xe6, 0xd0, 0x53, 0x58, 0x1a, 0x49, 0x97, 0xe8, 0xbd, 0x4b,
+	0x7c, 0xc7, 0xa9, 0xdd, 0xbc, 0x30, 0xe3, 0x1a, 0x73, 0xe8, 0x31, 0x54, 0x73, 0x1e, 0x42, 0x37,
+	0x67, 0x79, 0x8f, 0x0b, 0xbe, 0x71, 0x81, 0x83, 0x8d, 0xb9, 0xed, 0x07, 0x7f, 0x7a, 0xbd, 0x26,
+	0xfd, 0xe5, 0xf5, 0x9a, 0xf4, 0xd7, 0xd7, 0x6b, 0xd2, 0x2f, 0xfe, 0xb6, 0x36, 0x07, 0x37, 0x7a,
+	0xc1, 0xe9, 0xe6, 0x71, 0x10, 0x1c, 0x7b, 0x64, 0xd3, 0x21, 0x2f, 0xe2, 0x20, 0xf0, 0x22, 0x51,
+	0xce, 0xa1, 0xf4, 0x6c, 0x9e, 0xfd, 0x78, 0xf0, 0xdf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x58, 0x2e,
+	0x01, 0x6f, 0x86, 0x1c, 0x00, 0x00,
 }

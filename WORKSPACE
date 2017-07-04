@@ -2,7 +2,9 @@ workspace(name = "io_kythe")
 
 load("//:version.bzl", "check_version")
 
-check_version("0.4.3")
+# Check that the user has a version between our minimum supported version of
+# Bazel and our maximum supported version of Bazel.
+check_version("0.4.5", "0.5.1")
 
 load("//tools/cpp:clang_configure.bzl", "clang_configure")
 
@@ -17,10 +19,17 @@ cc_system_package(
     modname = "uuid",
 )
 
-cc_system_package(
+new_http_archive(
+    name = "org_libmemcached_libmemcached",
+    build_file = "third_party/libmemcached.BUILD",
+    sha256 = "e22c0bb032fde08f53de9ffbc5a128233041d9f33b5de022c0978a2149885f82",
+    strip_prefix = "libmemcached-1.0.18",
+    url = "https://launchpad.net/libmemcached/1.0/1.0.18/+download/libmemcached-1.0.18.tar.gz",
+)
+
+bind(
     name = "libmemcached",
-    default = "/usr/local/opt/libmemcached",
-    envvar = "MEMCACHED_HOME",
+    actual = "@org_libmemcached_libmemcached//:libmemcached",
 )
 
 http_archive(
@@ -69,8 +78,8 @@ maven_jar(
 
 maven_jar(
     name = "com_google_guava_guava",
-    artifact = "com.google.guava:guava:19.0",
-    sha1 = "6ce200f6b23222af3d8abb6b6459e6c44f4bb0e9",
+    artifact = "com.google.guava:guava:21.0",
+    sha1 = "3a3d111be1be1b745edfa7d91678a12d7ed38709",
 )
 
 maven_jar(
@@ -145,21 +154,27 @@ maven_jar(
     sha1 = "f7be08ec23c21485b9b5a1cf1654c2ec8c58168d",
 )
 
+maven_jar(
+    name = "com_google_auto_value",
+    artifact = "com.google.auto.value:auto-value:1.4.1",
+    sha1 = "8172ebbd7970188aff304c8a420b9f17168f6f48",
+)
+
 git_repository(
     name = "io_bazel_rules_go",
     remote = "https://github.com/bazelbuild/rules_go.git",
-    tag = "0.4.0",
+    tag = "0.4.3",
 )
 
 load("@io_bazel_rules_go//go:def.bzl", "go_repositories")
 
-go_repositories()
+go_repositories(go_version = "1.8.1")
 
-http_archive(
-    name = "io_bazel",
-    sha256 = "5a3388d58440200b5650cdc59b82f458184cba2578cf0e1c437eead3e5bde4bb",
-    strip_prefix = "bazel-0.4.4",
-    url = "https://github.com/bazelbuild/bazel/archive/0.4.4.zip",
+new_git_repository(
+    name = "go_errors",
+    build_file = "third_party/go/errors.BUILD",
+    commit = "ff09b135c25aae272398c51a07235b90a75aa4f0",
+    remote = "https://github.com/pkg/errors.git",
 )
 
 new_git_repository(
@@ -193,7 +208,7 @@ new_git_repository(
 new_git_repository(
     name = "go_x_tools",
     build_file = "third_party/go/x_tools.BUILD",
-    commit = "b5ed9db83fbf41b937824795876668fc8d31335a",
+    commit = "5682db0e919ed9cfc6f52ac32e170511a106eb3b",
     remote = "https://go.googlesource.com/tools",
 )
 
@@ -209,6 +224,13 @@ new_git_repository(
     build_file = "third_party/go/gapi.BUILD",
     commit = "0637df23b94dd27d09659ae7d9052b6c8d6fc1a0",
     remote = "https://github.com/google/google-api-go-client.git",
+)
+
+new_git_repository(
+    name = "go_subcommands",
+    build_file = "third_party/go/subcommands.BUILD",
+    commit = "ce3d4cfc062faac7115d44e5befec8b5a08c3faa",
+    remote = "https://github.com/google/subcommands.git",
 )
 
 new_git_repository(
@@ -228,7 +250,7 @@ new_git_repository(
 new_git_repository(
     name = "go_stringset",
     build_file = "third_party/go/stringset.BUILD",
-    commit = "09623af4dbc0fdd85acd9ed0da7f5028aa03c139",
+    commit = "cca3c3baee12304723dbf81064dfe387b8e4f61f",
     remote = "https://bitbucket.org/creachadair/stringset.git",
 )
 
@@ -272,10 +294,4 @@ new_git_repository(
     build_file = "third_party/go/levigo.BUILD",
     commit = "1ddad808d437abb2b8a55a950ec2616caa88969b",
     remote = "https://github.com/jmhodges/levigo.git",
-)
-
-maven_jar(
-    name = "com_google_auto_value",
-    artifact = "com.google.auto.value:auto-value:1.3",
-    sha1 = "4961194f62915eb45e21940537d60ac53912c57d",
 )

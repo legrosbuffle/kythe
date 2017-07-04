@@ -20,17 +20,18 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
+#include "clang/Frontend/FrontendAction.h"
+#include "clang/Tooling/Tooling.h"
 #include "kythe/cxx/common/indexing/KytheClaimClient.h"
 #include "kythe/cxx/common/indexing/KytheGraphRecorder.h"
 #include "kythe/cxx/common/indexing/KytheVFS.h"
 #include "kythe/cxx/common/json_proto.h"
 #include "kythe/proto/analysis.pb.h"
 #include "kythe/proto/cxx.pb.h"
-#include "third_party/llvm/src/clang_builtin_headers.h"
-#include "clang/Frontend/FrontendAction.h"
-#include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/Twine.h"
+#include "third_party/llvm/src/clang_builtin_headers.h"
 
 #include "KytheGraphObserver.h"
 
@@ -38,8 +39,7 @@ namespace kythe {
 
 bool RunToolOnCode(std::unique_ptr<clang::FrontendAction> tool_action,
                    llvm::Twine code, const std::string &filename) {
-  if (tool_action == nullptr)
-    return false;
+  if (tool_action == nullptr) return false;
   return clang::tooling::runToolOnCode(tool_action.release(), code, filename);
 }
 
@@ -81,7 +81,7 @@ std::string ConfigureSystemHeaders(const proto::CompilationUnit &Unit,
   }
   return "-resource-dir=/kythe_builtins";
 }
-} // anonymous namespace
+}  // anonymous namespace
 
 std::string IndexCompilationUnit(
     const proto::CompilationUnit &Unit, std::vector<proto::FileData> &Files,
@@ -135,16 +135,14 @@ std::string IndexCompilationUnit(
     }
   }
   if (MetaSupports != nullptr) {
-    for (auto &support : *MetaSupports) {
-      support->UseVNameLookup(
-          [VFS](const std::string &path, proto::VName *out) {
-            return VFS->get_vname(path, out);
-          });
-    }
+    MetaSupports->UseVNameLookup(
+        [VFS](const std::string &path, proto::VName *out) {
+          return VFS->get_vname(path, out);
+        });
   }
-  std::unique_ptr<IndexerFrontendAction> Action(
-      new IndexerFrontendAction(&Observer, HSIValid ? &HSI : nullptr,
-                                Options.ShouldStopIndexing, CreateWorklist));
+  std::unique_ptr<IndexerFrontendAction> Action(new IndexerFrontendAction(
+      &Observer, HSIValid ? &HSI : nullptr, Options.ShouldStopIndexing,
+      std::move(CreateWorklist)));
   Action->setIgnoreUnimplemented(Options.UnimplementedBehavior);
   Action->setTemplateMode(Options.TemplateBehavior);
   Action->setVerbosity(Options.Verbosity);
@@ -170,4 +168,4 @@ std::string IndexCompilationUnit(
   return "";
 }
 
-} // namespace kythe
+}  // namespace kythe

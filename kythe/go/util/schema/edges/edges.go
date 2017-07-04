@@ -39,9 +39,11 @@ const (
 	ExtendsPublic           = Prefix + "extends/public"
 	ExtendsPublicVirtual    = Prefix + "extends/public/virtual"
 	ExtendsVirtual          = Prefix + "extends/virtual"
+	Generates               = Prefix + "generates"
 	Named                   = Prefix + "named"
 	Overrides               = Prefix + "overrides"
 	Param                   = Prefix + "param"
+	Satisfies               = Prefix + "satisfies"
 	Typed                   = Prefix + "typed"
 )
 
@@ -55,6 +57,8 @@ const (
 	Ref               = Prefix + "ref"
 	RefCall           = Prefix + "ref/call"
 	RefImports        = Prefix + "ref/imports"
+	RefInit           = Prefix + "ref/init"
+	Tagged            = Prefix + "tagged"
 )
 
 // ParamIndex returns an edge label of the form "param.i" for the i given.
@@ -110,4 +114,15 @@ func ParseOrdinal(kind string) (base string, ordinal int, hasOrdinal bool) {
 	}
 	ordinal, _ = strconv.Atoi(m[2])
 	return m[1], ordinal, true
+}
+
+// OrdinalKind reports whether kind (which does not have an ordinal suffix)
+// generally has an associated ordinal (e.g. /kythe/edge/param edges).
+func OrdinalKind(kind string) bool {
+	switch Canonical(kind) {
+	case Param:
+		return true
+	default:
+		return false
+	}
 }
